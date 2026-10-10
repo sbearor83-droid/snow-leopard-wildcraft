@@ -85,7 +85,8 @@ export class MountainEnvironment {
     const skyMat = new THREE.MeshBasicMaterial({
       map: skyTex,
       side: THREE.BackSide,
-      depthWrite: false
+      depthWrite: false,
+      fog: false
     });
     this.skyDome = new THREE.Mesh(skyGeo, skyMat);
     this.scene.add(this.skyDome);
@@ -109,7 +110,8 @@ export class MountainEnvironment {
       map: sunTex,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      transparent: true
+      transparent: true,
+      fog: false
     });
     this.sunSprite = new THREE.Sprite(sunSpriteMat);
     this.sunSprite.scale.set(160, 160, 160);

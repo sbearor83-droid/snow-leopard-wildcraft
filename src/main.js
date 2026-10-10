@@ -25,9 +25,9 @@ class Game {
 
     // Setup Three.js Scene & Renderer
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xc2daf0, 90, 580);
+    this.scene.fog = new THREE.Fog(0xb8d2e8, 140, 720);
 
-    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 800);
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
     const isMobile = detectMobile();
     this.isMobile = isMobile;

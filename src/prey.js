@@ -262,20 +262,28 @@ export class PreyAnimal {
     const hornTipMat = new THREE.MeshStandardMaterial({ color: 0x221f1d, roughness: 0.6 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x161311, roughness: 0.7 });
 
-    // Massive Body Torso (scale ~ 2.4x of ibex)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.0, 3.4), shaggyMat);
+    // Massive Barrel-Chested Torso
+    const bodyGeo = new THREE.CylinderGeometry(1.15, 1.25, 3.5, 12);
+    bodyGeo.rotateX(Math.PI / 2);
+    bodyGeo.scale(1.05, 1.1, 1.0);
+    const body = new THREE.Mesh(bodyGeo, shaggyMat);
     body.position.y = 2.4;
     body.castShadow = true;
     group.add(body);
 
     // Iconic Prominent Shoulder Hump
-    const hump = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.1, 1.8), humpMat);
-    hump.position.set(0, 3.3, 0.7);
+    const humpGeo = new THREE.SphereGeometry(1.2, 10, 8);
+    humpGeo.scale(0.88, 1.05, 1.2);
+    const hump = new THREE.Mesh(humpGeo, humpMat);
+    hump.position.set(0, 3.2, 0.7);
     hump.castShadow = true;
     group.add(hump);
 
     // Hanging Shaggy Wool Skirt / Fringe on flanks & belly
-    const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.35, 1.2, 3.2), skirtMat);
+    const skirtGeo = new THREE.CylinderGeometry(1.28, 1.35, 3.4, 12);
+    skirtGeo.rotateX(Math.PI / 2);
+    skirtGeo.scale(1.02, 0.75, 1.0);
+    const skirt = new THREE.Mesh(skirtGeo, skirtMat);
     skirt.position.set(0, 1.6, 0);
     skirt.castShadow = true;
     group.add(skirt);
@@ -286,19 +294,25 @@ export class PreyAnimal {
     headNode.position.set(0, 2.7, 1.9);
     group.add(headNode);
 
-    const neck = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.5, 1.4), shaggyMat);
+    const neckGeo = new THREE.CylinderGeometry(0.75, 0.95, 1.5, 10);
+    neckGeo.scale(0.95, 1.1, 1.0);
+    const neck = new THREE.Mesh(neckGeo, shaggyMat);
     neck.position.set(0, 0.2, 0.4);
     neck.rotation.x = 0.45;
     neck.castShadow = true;
     headNode.add(neck);
 
-    const headMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1.5), shaggyMat);
+    const headGeo = new THREE.SphereGeometry(0.75, 10, 10);
+    headGeo.scale(0.9, 0.85, 1.15);
+    const headMesh = new THREE.Mesh(headGeo, shaggyMat);
     headMesh.position.set(0, 0.5, 1.1);
     headMesh.castShadow = true;
     headNode.add(headMesh);
 
-    // Broad Snout & Nostrils
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), darkMat);
+    // Broad Curved Snout & Nostrils
+    const snoutGeo = new THREE.CylinderGeometry(0.48, 0.58, 0.9, 10);
+    snoutGeo.rotateX(Math.PI / 2);
+    const snout = new THREE.Mesh(snoutGeo, darkMat);
     snout.position.set(0, 0.25, 1.8);
     headNode.add(snout);
 
@@ -366,13 +380,19 @@ export class PreyAnimal {
     const hornMat = new THREE.MeshStandardMaterial({ color: 0x3d352e, roughness: 0.6 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x221f1d, roughness: 0.7 });
 
-    // Torso
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 1.7), coatMat);
+    // Torso (agile sculpted mountain body)
+    const bodyGeo = new THREE.CylinderGeometry(0.48, 0.58, 1.7, 10);
+    bodyGeo.rotateX(Math.PI / 2);
+    bodyGeo.scale(1.0, 1.08, 1.0);
+    const body = new THREE.Mesh(bodyGeo, coatMat);
     body.position.y = 1.35;
     body.castShadow = true;
     group.add(body);
 
-    const belly = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.35, 1.5), underMat);
+    const bellyGeo = new THREE.CylinderGeometry(0.42, 0.48, 1.5, 10);
+    bellyGeo.rotateX(Math.PI / 2);
+    bellyGeo.scale(0.9, 0.55, 1.0);
+    const belly = new THREE.Mesh(bellyGeo, underMat);
     belly.position.set(0, 0.95, 0);
     group.add(belly);
 
@@ -382,19 +402,25 @@ export class PreyAnimal {
     headNode.position.set(0, 1.65, 0.85);
     group.add(headNode);
 
-    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.8, 0.7), coatMat);
+    const neckGeo = new THREE.CylinderGeometry(0.32, 0.45, 0.85, 8);
+    neckGeo.scale(0.85, 1.1, 1.0);
+    const neck = new THREE.Mesh(neckGeo, coatMat);
     neck.position.set(0, 0.3, 0.2);
     neck.rotation.x = 0.5;
     neck.castShadow = true;
     headNode.add(neck);
 
-    const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.55, 0.85), coatMat);
+    const headGeo = new THREE.SphereGeometry(0.38, 8, 8);
+    headGeo.scale(0.85, 0.8, 1.1);
+    const headMesh = new THREE.Mesh(headGeo, coatMat);
     headMesh.position.set(0, 0.6, 0.45);
     headMesh.castShadow = true;
     headNode.add(headMesh);
 
     // Muzzle
-    const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.5), underMat);
+    const muzzleGeo = new THREE.CylinderGeometry(0.2, 0.28, 0.5, 8);
+    muzzleGeo.rotateX(Math.PI / 2);
+    const muzzle = new THREE.Mesh(muzzleGeo, underMat);
     muzzle.position.set(0, 0.45, 0.85);
     headNode.add(muzzle);
 

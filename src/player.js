@@ -177,55 +177,94 @@ export class SnowLeopard {
     this.bodyRoot = new THREE.Group();
     group.add(this.bodyRoot);
 
-    // --- Torso & Spine ---
-    // Main ribcage / chest
-    const chestGeo = new THREE.BoxGeometry(1.2, 1.1, 1.5);
+    // --- Torso & Spine (Organic Muscular Feline Contour) ---
+    // Deep athletic ribcage & shoulders
+    const chestGeo = new THREE.CylinderGeometry(0.52, 0.62, 1.55, 12);
+    chestGeo.rotateX(Math.PI / 2);
+    chestGeo.scale(1.08, 1.14, 1.0);
     this.chest = new THREE.Mesh(chestGeo, bodyMat);
     this.chest.position.set(0, 1.35, 0.4);
     this.chest.castShadow = true;
     this.bodyRoot.add(this.chest);
 
-    // Hips / abdomen
-    const hipsGeo = new THREE.BoxGeometry(1.05, 0.95, 1.4);
+    // Powerful feline haunches & tapered waist (flank)
+    const hipsGeo = new THREE.CylinderGeometry(0.58, 0.48, 1.35, 12);
+    hipsGeo.rotateX(Math.PI / 2);
+    hipsGeo.scale(1.02, 1.08, 1.0);
     this.hips = new THREE.Mesh(hipsGeo, bodyMat);
-    this.hips.position.set(0, 1.3, -0.7);
+    this.hips.position.set(0, 1.32, -0.7);
     this.hips.castShadow = true;
     this.bodyRoot.add(this.hips);
 
-    // Belly fluff under chest
-    const bellyGeo = new THREE.BoxGeometry(0.95, 0.3, 2.2);
+    // Muscular shoulder blades & haunches
+    for (let side = -1; side <= 1; side += 2) {
+      const shoulderGeo = new THREE.SphereGeometry(0.32, 8, 8);
+      shoulderGeo.scale(0.7, 1.25, 0.95);
+      const shoulder = new THREE.Mesh(shoulderGeo, bodyMat);
+      shoulder.position.set(side * 0.42, 1.48, 0.55);
+      shoulder.castShadow = true;
+      this.bodyRoot.add(shoulder);
+
+      const flankHaunch = new THREE.Mesh(shoulderGeo, bodyMat);
+      flankHaunch.position.set(side * 0.44, 1.44, -0.75);
+      flankHaunch.castShadow = true;
+      this.bodyRoot.add(flankHaunch);
+    }
+
+    // Soft white fur belly & chest contour
+    const bellyGeo = new THREE.CylinderGeometry(0.38, 0.45, 1.95, 10);
+    bellyGeo.rotateX(Math.PI / 2);
+    bellyGeo.scale(0.9, 0.48, 1.0);
     const belly = new THREE.Mesh(bellyGeo, whiteFurMat);
-    belly.position.set(0, 0.85, -0.1);
+    belly.position.set(0, 0.88, -0.1);
     this.bodyRoot.add(belly);
 
-    // --- Neck & Head ---
+    // --- Neck & Head (Sculpted Predator Skull) ---
     this.neck = new THREE.Group();
     this.neck.position.set(0, 1.5, 1.1);
     this.bodyRoot.add(this.neck);
 
-    const neckMesh = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.8), bodyMat);
-    neckMesh.position.set(0, 0.15, 0.25);
-    neckMesh.rotation.x = 0.35;
+    const neckGeo = new THREE.CylinderGeometry(0.42, 0.52, 0.88, 10);
+    neckGeo.scale(0.88, 1.1, 1.0);
+    const neckMesh = new THREE.Mesh(neckGeo, bodyMat);
+    neckMesh.position.set(0, 0.16, 0.28);
+    neckMesh.rotation.x = 0.38;
     neckMesh.castShadow = true;
     this.neck.add(neckMesh);
 
     this.head = new THREE.Group();
-    this.head.position.set(0, 0.45, 0.65);
+    this.head.position.set(0, 0.48, 0.68);
     this.neck.add(this.head);
 
-    // Skull
-    const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.75, 0.95), bodyMat);
+    // Rounded Feline Skull / Cranium
+    const headGeo = new THREE.SphereGeometry(0.52, 10, 10);
+    headGeo.scale(0.94, 0.84, 1.05);
+    const headMesh = new THREE.Mesh(headGeo, bodyMat);
     headMesh.castShadow = true;
     this.head.add(headMesh);
 
-    // Muzzle / Snout
-    const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.42, 0.6), whiteFurMat);
-    muzzle.position.set(0, -0.15, 0.6);
+    // Cheekbones / Zygomatic arches (feline whisker puff base)
+    for (let side = -1; side <= 1; side += 2) {
+      const cheekGeo = new THREE.SphereGeometry(0.24, 8, 8);
+      cheekGeo.scale(0.7, 0.75, 1.1);
+      const cheek = new THREE.Mesh(cheekGeo, whiteFurMat);
+      cheek.position.set(side * 0.32, -0.1, 0.38);
+      this.head.add(cheek);
+    }
+
+    // Tapered Muzzle / Snout
+    const muzzleGeo = new THREE.CylinderGeometry(0.22, 0.32, 0.62, 10);
+    muzzleGeo.rotateX(Math.PI / 2);
+    muzzleGeo.scale(1.0, 0.82, 1.0);
+    const muzzle = new THREE.Mesh(muzzleGeo, whiteFurMat);
+    muzzle.position.set(0, -0.14, 0.56);
     this.head.add(muzzle);
 
-    // Nose
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.15), noseMat);
-    nose.position.set(0, -0.05, 0.92);
+    // Sculpted Nose Pad
+    const noseGeo = new THREE.SphereGeometry(0.12, 6, 6);
+    noseGeo.scale(1.15, 0.7, 0.65);
+    const nose = new THREE.Mesh(noseGeo, noseMat);
+    nose.position.set(0, -0.06, 0.88);
     this.head.add(nose);
 
     // Eyes (left & right)
@@ -334,34 +373,45 @@ export class SnowLeopard {
     const root = new THREE.Group();
     root.position.set(x, y, z);
 
-    // Upper thigh/shoulder
-    const upperLen = isBack ? 0.65 : 0.6;
-    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.38, upperLen, 0.42), mat);
+    // Upper thigh/shoulder (tapered muscular limb)
+    const upperLen = isBack ? 0.68 : 0.62;
+    const upperGeo = new THREE.CylinderGeometry(0.22, 0.32, upperLen, 10);
+    upperGeo.scale(0.85, 1.0, 1.15);
+    const upper = new THREE.Mesh(upperGeo, mat);
     upper.position.y = -upperLen * 0.45;
     upper.castShadow = true;
     root.add(upper);
 
     // Knee / Hock joint
     const lowerJoint = new THREE.Group();
-    lowerJoint.position.set(0, -upperLen * 0.85, isBack ? -0.1 : 0.05);
+    lowerJoint.position.set(0, -upperLen * 0.85, isBack ? -0.12 : 0.05);
     root.add(lowerJoint);
 
-    const lowerLen = 0.55;
-    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.32, lowerLen, 0.35), mat);
+    const lowerLen = 0.56;
+    const lowerGeo = new THREE.CylinderGeometry(0.16, 0.22, lowerLen, 10);
+    const lower = new THREE.Mesh(lowerGeo, mat);
     lower.position.y = -lowerLen * 0.45;
     lower.castShadow = true;
     lowerJoint.add(lower);
 
-    // Wide Snow Paws (Snowshoes adaptation!)
-    const paw = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.52), pawMat);
-    paw.position.set(0, -lowerLen * 0.85, 0.12);
+    // Rounded Snowshoe Paw (wide cushioned paw pad)
+    const pawGeo = new THREE.SphereGeometry(0.24, 8, 8);
+    pawGeo.scale(1.0, 0.55, 1.25);
+    const paw = new THREE.Mesh(pawGeo, pawMat);
+    paw.position.set(0, -lowerLen * 0.85, 0.14);
     paw.castShadow = true;
     lowerJoint.add(paw);
 
-    // Retractable Claws
+    // 3 Rounded knuckle toes with claws
     for (let c = -1; c <= 1; c++) {
-      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 4), clawMat);
-      claw.position.set(c * 0.12, -lowerLen * 0.9, 0.38);
+      const toeGeo = new THREE.SphereGeometry(0.08, 6, 6);
+      toeGeo.scale(0.8, 0.7, 1.1);
+      const toe = new THREE.Mesh(toeGeo, pawMat);
+      toe.position.set(c * 0.12, -lowerLen * 0.86, 0.32);
+      lowerJoint.add(toe);
+
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.11, 4), clawMat);
+      claw.position.set(c * 0.12, -lowerLen * 0.88, 0.41);
       claw.rotation.x = Math.PI / 2.3;
       lowerJoint.add(claw);
     }
