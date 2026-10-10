@@ -31,6 +31,8 @@ Signing credentials are **never** stored in source control. The release build re
    ```
    (On Windows use `gradlew.bat`.)
 
+Google Play requires new apps to target a recent Android API level; `targetSdkVersion` is set in `android/variables.gradle`.
+
 Enroll in **Play App Signing** when you create the app (the default). Google then holds the real app-signing key and your keystore is only the *upload* key, which Google can reset if it is ever lost or leaked.
 
 Before each new Play upload, bump `versionCode` (and usually `versionName`) in `android/app/build.gradle`.
