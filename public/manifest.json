@@ -1,12 +1,12 @@
 {
-  "name": "Snow Leopard: Mountain Hunter",
-  "short_name": "SnowLeopard",
+  "name": "Snow Leopard World",
+  "short_name": "Snow Leopard",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "landscape",
   "background_color": "#0d1520",
   "theme_color": "#0d1520",
-  "description": "Wildcraft-inspired 3D Snow Leopard mountain hunting simulator for Android and Web",
+  "description": "3D snow leopard mountain hunting game",
   "icons": [
     {
       "src": "./icon.svg",

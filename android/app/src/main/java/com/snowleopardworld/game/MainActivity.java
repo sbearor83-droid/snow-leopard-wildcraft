@@ -1,4 +1,4 @@
-package com.snowleopard.mountainhunter;
+package com.snowleopardworld.game;
 
 import com.getcapacitor.BridgeActivity;
 

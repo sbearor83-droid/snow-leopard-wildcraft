@@ -23,6 +23,11 @@ android/app/*.iml
 *.jks
 release-builds/*.keystore
 android/app/*.keystore
+android/keystore.properties
+
+# Release artifacts (publish these via GitHub Releases / Play Console, not git)
+release-builds/*.apk
+release-builds/*.aab
 
 # System files
 .DS_Store

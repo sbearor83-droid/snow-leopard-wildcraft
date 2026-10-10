@@ -1,6 +1,13 @@
 import * as THREE from 'three';
 import { sounds } from './audio.js';
 
+// Scent trail colour per prey type (RGB 0-1)
+const TRAIL_COLORS = {
+  ibex: [0.96, 0.62, 0.07], // amber
+  hare: [0.02, 0.71, 0.83], // cyan
+  yak: [0.94, 0.27, 0.27] // red: dangerous boss
+};
+
 // Optimized Zero-Allocation Wildcraft Scent Vision & Hunting Radar System
 export class ScentVision {
   constructor(scene) {
@@ -46,8 +53,7 @@ export class ScentVision {
       vertexColors: true,
       transparent: true,
       opacity: 0.85,
-      depthWrite: false,
-      linewidth: 2
+      depthWrite: false
     });
 
     this.trailMesh = new THREE.LineSegments(trailGeo, trailMat);
@@ -116,20 +122,26 @@ export class ScentVision {
     this.sonarMesh.material.opacity = Math.max(0, 0.85 * (1 - this.sonarRadius / 110));
 
     // Update in-place buffer positions without allocating any new objects
-    const activePrey = preyList.filter((p) => !p.isDead && p.position.distanceTo(playerPos) < 120);
     const posAttr = this.trailMesh.geometry.attributes.position;
     const colAttr = this.trailMesh.geometry.attributes.color;
     let vertIdx = 0;
+    let preyIdx = 0;
     const nowTime = performance.now() * 0.003;
 
     for (let t = 0; t < this.maxTrails; t++) {
-      if (t < activePrey.length) {
-        const p = activePrey[t];
+      // Advance to the next living prey within scent range
+      let p = null;
+      while (preyIdx < preyList.length) {
+        const candidate = preyList[preyIdx++];
+        if (!candidate.isDead && candidate.position.distanceTo(playerPos) < 120) {
+          p = candidate;
+          break;
+        }
+      }
+
+      if (p) {
         const dist = playerPos.distanceTo(p.position);
-        const isIbex = p.type === 'ibex';
-        const cr = isIbex ? 0.96 : 0.02;
-        const cg = isIbex ? 0.62 : 0.71;
-        const cb = isIbex ? 0.07 : 0.83;
+        const [cr, cg, cb] = TRAIL_COLORS[p.type];
 
         let prevX = playerPos.x;
         let prevY = playerPos.y + 0.8;

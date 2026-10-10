@@ -1,5 +1,19 @@
 import * as THREE from 'three';
 import { sounds } from './audio.js';
+import { lerpAngle } from './utils.js';
+
+// Carcasses that are never fully eaten rot away after this many seconds
+const CARCASS_LIFETIME = 90;
+// Seconds a fully eaten carcass lingers before it is removed
+const EATEN_DISSOLVE_TIME = 6;
+
+// One model per prey type is built once and cloned; clones share geometry and materials
+const MODEL_CACHE = {};
+
+// Scratch vectors reused every frame to avoid per-frame allocations
+const _toPlayer = new THREE.Vector3();
+const _forward = new THREE.Vector3();
+const _fleeDir = new THREE.Vector3();
 
 // Prey Entity (Himalayan Ibex / Snow Hare / Titan Yak Boss) with Wildcraft Stealth & Perception AI
 export class PreyManager {
@@ -51,12 +65,13 @@ export class PreyManager {
       p.update(delta, player, this.preyList);
     });
 
-    // Clean up fully consumed carcasses after a delay
+    // Clean up eaten carcasses quickly, and uneaten ones once they have rotted
     for (let i = this.preyList.length - 1; i >= 0; i--) {
       const p = this.preyList[i];
-      if (p.isDead && p.meatAmount <= 0) {
-        p.dissolveTimer = (p.dissolveTimer || 0) + delta;
-        if (p.dissolveTimer > 6.0) {
+      if (p.isDead) {
+        p.deadTimer += delta;
+        if (p.meatAmount <= 0) p.dissolveTimer += delta;
+        if (p.dissolveTimer > EATEN_DISSOLVE_TIME || p.deadTimer > CARCASS_LIFETIME) {
           p.destroy();
           this.preyList.splice(i, 1);
           // Respawn in distant location
@@ -68,34 +83,19 @@ export class PreyManager {
     }
   }
 
-  getNearestPrey(playerPos) {
+  // Nearest living prey (optionally bosses only) and its distance
+  getNearestLiving(playerPos, bossOnly = false) {
     let nearest = null;
-    let minDist = Infinity;
-    this.preyList.forEach((p) => {
-      if (!p.isDead) {
-        const d = playerPos.distanceTo(p.position);
-        if (d < minDist) {
-          minDist = d;
-          nearest = p;
-        }
+    let minDistSq = Infinity;
+    for (const p of this.preyList) {
+      if (p.isDead || (bossOnly && !p.isBoss)) continue;
+      const dSq = playerPos.distanceToSquared(p.position);
+      if (dSq < minDistSq) {
+        minDistSq = dSq;
+        nearest = p;
       }
-    });
-    return { prey: nearest, distance: minDist };
-  }
-
-  getNearestBoss(playerPos) {
-    let nearest = null;
-    let minDist = Infinity;
-    this.preyList.forEach((p) => {
-      if (p.isBoss && !p.isDead) {
-        const d = playerPos.distanceTo(p.position);
-        if (d < minDist) {
-          minDist = d;
-          nearest = p;
-        }
-      }
-    });
-    return { boss: nearest, distance: minDist };
+    }
+    return { prey: nearest, distance: Math.sqrt(minDistSq) };
   }
 }
 
@@ -111,6 +111,8 @@ export class PreyAnimal {
     this.state = 'GRAZING'; // GRAZING, SUSPICIOUS, FLEEING, CHARGING, DOWNED
     this.alertMeter = 0; // 0 to 100
     this.isDead = false;
+    this.deadTimer = 0;
+    this.dissolveTimer = 0;
 
     // Base Archetype Configuration
     if (this.isBoss) {
@@ -152,14 +154,15 @@ export class PreyAnimal {
     this.applyDifficulty(difficulty);
     this.hp = this.maxHp;
 
-    // Build stylized 3D Model
-    if (this.isBoss) {
-      this.mesh = this.buildYakModel();
-    } else if (this.type === 'ibex') {
-      this.mesh = this.buildIbexModel();
-    } else {
-      this.mesh = this.buildHareModel();
+    // Build stylized 3D Model (once per type, then cloned)
+    if (!MODEL_CACHE[type]) {
+      if (this.isBoss) MODEL_CACHE[type] = this.buildYakModel();
+      else if (type === 'ibex') MODEL_CACHE[type] = this.buildIbexModel();
+      else MODEL_CACHE[type] = this.buildHareModel();
     }
+    this.mesh = MODEL_CACHE[type].clone();
+    this.headNode = this.mesh.getObjectByName('head');
+    this.legMeshes = this.mesh.children.filter((c) => c.name === 'leg');
     this.mesh.position.copy(this.position);
     this.scene.add(this.mesh);
 
@@ -223,6 +226,10 @@ export class PreyAnimal {
 
   updateSprite(text, color) {
     if (!this.spriteCanvas) return;
+    // Skip redrawing (and re-uploading the texture) when nothing changed
+    if (text === this.spriteText && color === this.spriteColor) return;
+    this.spriteText = text;
+    this.spriteColor = color;
     const ctx = this.spriteCanvas.getContext('2d');
     ctx.clearRect(0, 0, 64, 64);
     if (!text) {
@@ -274,25 +281,26 @@ export class PreyAnimal {
     group.add(skirt);
 
     // Heavy Neck & Head
-    this.headNode = new THREE.Group();
-    this.headNode.position.set(0, 2.7, 1.9);
-    group.add(this.headNode);
+    const headNode = new THREE.Group();
+    headNode.name = 'head';
+    headNode.position.set(0, 2.7, 1.9);
+    group.add(headNode);
 
     const neck = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.5, 1.4), shaggyMat);
     neck.position.set(0, 0.2, 0.4);
     neck.rotation.x = 0.45;
     neck.castShadow = true;
-    this.headNode.add(neck);
+    headNode.add(neck);
 
     const headMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1.5), shaggyMat);
     headMesh.position.set(0, 0.5, 1.1);
     headMesh.castShadow = true;
-    this.headNode.add(headMesh);
+    headNode.add(headMesh);
 
     // Broad Snout & Nostrils
     const snout = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), darkMat);
     snout.position.set(0, 0.25, 1.8);
-    this.headNode.add(snout);
+    headNode.add(snout);
 
     // Majestic Sweeping Curved Yak Horns
     for (let side = -1; side <= 1; side += 2) {
@@ -301,21 +309,21 @@ export class PreyAnimal {
       h1.rotation.z = side * -1.2;
       h1.rotation.y = side * 0.2;
       h1.castShadow = true;
-      this.headNode.add(h1);
+      headNode.add(h1);
 
       const h2 = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.9, 7), hornMat);
       h2.position.set(side * 1.5, 1.25, 1.2);
       h2.rotation.z = side * -0.5;
       h2.rotation.x = 0.5;
       h2.castShadow = true;
-      this.headNode.add(h2);
+      headNode.add(h2);
 
       const h3 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.7, 6), hornTipMat);
       h3.position.set(side * 1.7, 1.9, 1.4);
       h3.rotation.z = side * 0.3;
       h3.rotation.x = 0.8;
       h3.castShadow = true;
-      this.headNode.add(h3);
+      headNode.add(h3);
     }
 
     // Shaggy Bushy Tail
@@ -325,7 +333,6 @@ export class PreyAnimal {
     group.add(tail);
 
     // Thick Sturdy Pillar Legs
-    this.legMeshes = [];
     const legPositions = [
       [0.8, 1.8, 1.2],
       [-0.8, 1.8, 1.2],
@@ -345,8 +352,8 @@ export class PreyAnimal {
       hoof.position.y = -1.6;
       legRoot.add(hoof);
 
+      legRoot.name = 'leg';
       group.add(legRoot);
-      this.legMeshes.push(legRoot);
     });
 
     return group;
@@ -370,35 +377,35 @@ export class PreyAnimal {
     group.add(belly);
 
     // Neck & Head
-    this.headNode = new THREE.Group();
-    this.headNode.position.set(0, 1.65, 0.85);
-    group.add(this.headNode);
+    const headNode = new THREE.Group();
+    headNode.name = 'head';
+    headNode.position.set(0, 1.65, 0.85);
+    group.add(headNode);
 
     const neck = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.8, 0.7), coatMat);
     neck.position.set(0, 0.3, 0.2);
     neck.rotation.x = 0.5;
     neck.castShadow = true;
-    this.headNode.add(neck);
+    headNode.add(neck);
 
     const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.55, 0.85), coatMat);
     headMesh.position.set(0, 0.6, 0.45);
     headMesh.castShadow = true;
-    this.headNode.add(headMesh);
+    headNode.add(headMesh);
 
     // Muzzle
     const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.5), underMat);
     muzzle.position.set(0, 0.45, 0.85);
-    this.headNode.add(muzzle);
+    headNode.add(muzzle);
 
     // Beard
     const beard = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 4), darkMat);
     beard.position.set(0, 0.2, 0.75);
     beard.rotation.x = -0.3;
-    this.headNode.add(beard);
+    headNode.add(beard);
 
     // Majestic Curved Ibex Horns (scimitar ridges)
     for (let side = -1; side <= 1; side += 2) {
-      let hornRoot = this.headNode;
       for (let s = 0; s < 4; s++) {
         const seg = new THREE.Mesh(
           new THREE.CylinderGeometry(0.12 - s * 0.025, 0.15 - s * 0.025, 0.4, 6),
@@ -408,12 +415,11 @@ export class PreyAnimal {
         seg.rotation.x = -0.5 - s * 0.25;
         seg.rotation.z = side * 0.2;
         seg.castShadow = true;
-        this.headNode.add(seg);
+        headNode.add(seg);
       }
     }
 
     // Legs
-    this.legMeshes = [];
     const legPositions = [
       [0.4, 1.1, 0.6],
       [-0.4, 1.1, 0.6],
@@ -432,8 +438,8 @@ export class PreyAnimal {
       hoof.position.y = -1.0;
       legRoot.add(hoof);
 
+      legRoot.name = 'leg';
       group.add(legRoot);
-      this.legMeshes.push(legRoot);
     });
 
     return group;
@@ -453,13 +459,14 @@ export class PreyAnimal {
     group.add(body);
 
     // Head
-    this.headNode = new THREE.Group();
-    this.headNode.position.set(0, 0.75, 0.45);
-    group.add(this.headNode);
+    const headNode = new THREE.Group();
+    headNode.name = 'head';
+    headNode.position.set(0, 0.75, 0.45);
+    group.add(headNode);
 
     const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), whiteMat);
     headMesh.castShadow = true;
-    this.headNode.add(headMesh);
+    headNode.add(headMesh);
 
     // Tall Ears
     for (let side = -1; side <= 1; side += 2) {
@@ -467,12 +474,12 @@ export class PreyAnimal {
       ear.position.set(side * 0.16, 0.45, -0.05);
       ear.rotation.z = side * -0.2;
       ear.castShadow = true;
-      this.headNode.add(ear);
+      headNode.add(ear);
 
       const tip = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 5), earTipMat);
       tip.position.set(side * 0.16, 0.72, -0.05);
       tip.rotation.z = side * -0.2;
-      this.headNode.add(tip);
+      headNode.add(tip);
     }
 
     // Fluffy Pompom Tail
@@ -481,7 +488,6 @@ export class PreyAnimal {
     group.add(tail);
 
     // Legs
-    this.legMeshes = [];
     for (let i = 0; i < 4; i++) {
       const legRoot = new THREE.Group();
       const isBack = i >= 2;
@@ -492,8 +498,8 @@ export class PreyAnimal {
       leg.castShadow = true;
       legRoot.add(leg);
 
+      legRoot.name = 'leg';
       group.add(legRoot);
-      this.legMeshes.push(legRoot);
     }
 
     return group;
@@ -553,18 +559,16 @@ export class PreyAnimal {
     this.animTime += delta * 6;
     const distToPlayer = this.position.distanceTo(player.position);
 
-    // Vector to player
-    const toPlayer = player.position.clone().sub(this.position);
-    toPlayer.y = 0;
-    const dirToPlayer = toPlayer.clone().normalize();
+    // Flat direction to player
+    const dirToPlayer = _toPlayer.subVectors(player.position, this.position).setY(0).normalize();
 
     // Facing vector of prey
-    const forward = new THREE.Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
-    const angleToPlayer = forward.angleTo(dirToPlayer); // 0 = straight ahead, PI = directly behind
+    _forward.set(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
+    const angleToPlayer = _forward.angleTo(dirToPlayer); // 0 = straight ahead, PI = directly behind
 
-    const perceptionMult = this.perceptionMultiplier || 1.0;
-    const speedMult = this.speedMultiplier || 1.0;
-    const alertMult = this.alertRateMultiplier || 1.0;
+    const perceptionMult = this.perceptionMultiplier;
+    const speedMult = this.speedMultiplier;
+    const alertMult = this.alertRateMultiplier;
 
     // --- SENSE CALCULATIONS ---
     // Hearing: drastically reduced when player is STALKING
@@ -622,11 +626,10 @@ export class PreyAnimal {
         this.state = 'SUSPICIOUS';
         this.updateSprite(this.isBoss ? '👑?' : '?', '#eab308');
       }
-    } else {
-      if (this.state === 'SUSPICIOUS') {
-        this.state = 'GRAZING';
-        this.updateSprite(this.isBoss ? '👑' : '', '#fbbf24');
-      }
+    } else if (this.state === 'SUSPICIOUS' || this.state === 'FLEEING') {
+      // Calmed down (or escaped): go back to grazing
+      this.state = 'GRAZING';
+      this.updateSprite(this.isBoss ? '👑' : '', '#fbbf24');
     }
 
     // --- BEHAVIOR STATE EXECUTION ---
@@ -636,21 +639,17 @@ export class PreyAnimal {
       this.wanderTimer -= delta;
       if (this.wanderTimer <= 0) {
         this.wanderTimer = 3 + Math.random() * 5;
-        this.facingAngle += (Math.random() - 0.5) * 1.8;
+        this.facingAngle = lerpAngle(this.facingAngle, this.facingAngle + (Math.random() - 0.5) * 1.8, 1);
       }
       targetSpeed = 1.2 * speedMult;
       // Head down grazing
-      if (this.headNode) {
-        this.headNode.rotation.x = 0.5 + Math.sin(this.animTime * 0.4) * 0.2;
-      }
+      this.headNode.rotation.x = 0.5 + Math.sin(this.animTime * 0.4) * 0.2;
     } else if (this.state === 'SUSPICIOUS') {
       // Freeze, look at predator
       targetSpeed = 0;
       const lookAngle = Math.atan2(dirToPlayer.x, dirToPlayer.z);
-      this.facingAngle = THREE.MathUtils.lerp(this.facingAngle, lookAngle, delta * 3);
-      if (this.headNode) {
-        this.headNode.rotation.x = -0.3; // Head held alert and high
-      }
+      this.facingAngle = lerpAngle(this.facingAngle, lookAngle, delta * 3);
+      this.headNode.rotation.x = -0.3; // Head held alert and high
     } else if (this.state === 'CHARGING') {
       // BOSS YAK COMBAT: Charge straight at the predator!
       this.chargeTimer -= delta;
@@ -658,11 +657,9 @@ export class PreyAnimal {
 
       targetSpeed = this.chargeSpeed * speedMult;
       const targetAngle = Math.atan2(dirToPlayer.x, dirToPlayer.z);
-      this.facingAngle = THREE.MathUtils.lerp(this.facingAngle, targetAngle, delta * 5);
+      this.facingAngle = lerpAngle(this.facingAngle, targetAngle, delta * 5);
 
-      if (this.headNode) {
-        this.headNode.rotation.x = 0.55; // Lower horns ready to ram!
-      }
+      this.headNode.rotation.x = 0.55; // Lower horns ready to ram!
 
       // Ramming Snow Leopard
       if (distToPlayer < 2.5 && this.chargeCooldown <= 0) {
@@ -688,8 +685,7 @@ export class PreyAnimal {
       // Bolt in opposite direction of predator, with erratic zigzags for hares
       targetSpeed = this.maxFleeSpeed * speedMult;
 
-      const fleeDir = this.position.clone().sub(player.position).normalize();
-      fleeDir.y = 0;
+      const fleeDir = _fleeDir.subVectors(this.position, player.position).setY(0).normalize();
 
       if (this.type === 'hare') {
         this.zigzagTimer -= delta;
@@ -698,20 +694,19 @@ export class PreyAnimal {
           this.zigzagDir *= -1;
         }
         // Perpendicular evasive dodge
-        const perp = new THREE.Vector3(-fleeDir.z, 0, fleeDir.x).multiplyScalar(this.zigzagDir * 0.6);
-        fleeDir.add(perp).normalize();
+        const px = -fleeDir.z * this.zigzagDir * 0.6;
+        const pz = fleeDir.x * this.zigzagDir * 0.6;
+        fleeDir.set(fleeDir.x + px, 0, fleeDir.z + pz).normalize();
       }
 
       const targetAngle = Math.atan2(fleeDir.x, fleeDir.z);
-      this.facingAngle = THREE.MathUtils.lerp(this.facingAngle, targetAngle, delta * 8);
+      this.facingAngle = lerpAngle(this.facingAngle, targetAngle, delta * 8);
 
-      if (this.headNode) {
-        this.headNode.rotation.x = 0.1;
-      }
+      this.headNode.rotation.x = 0.1;
 
       // If fled far enough, calm down
       if (distToPlayer > 55) {
-        this.alertMeter -= delta * 20;
+        this.alertMeter = Math.max(0, this.alertMeter - delta * 20);
       }
     }
 
@@ -719,8 +714,8 @@ export class PreyAnimal {
 
     // Apply movement
     if (this.speed > 0.1) {
-      const move = new THREE.Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
-      this.position.addScaledVector(move, this.speed * delta);
+      this.position.x += Math.sin(this.facingAngle) * this.speed * delta;
+      this.position.z += Math.cos(this.facingAngle) * this.speed * delta;
     }
 
     // Keep within world bounds
@@ -741,7 +736,7 @@ export class PreyAnimal {
     const isChargingOrFleeing = this.state === 'FLEEING' || this.state === 'CHARGING';
     const legFreq = isChargingOrFleeing ? 18 : 6;
     const legAmp = isChargingOrFleeing ? 0.7 : 0.3;
-    if (this.legMeshes && this.speed > 0.2) {
+    if (this.speed > 0.2) {
       this.legMeshes.forEach((leg, idx) => {
         const offset = idx % 2 === 0 ? 0 : Math.PI;
         leg.rotation.x = Math.sin(this.animTime * legFreq + offset) * legAmp;
@@ -751,5 +746,8 @@ export class PreyAnimal {
 
   destroy() {
     this.scene.remove(this.mesh);
+    // Geometry and materials are shared with the cached model; only the status sprite is unique
+    this.spriteTex.dispose();
+    this.alertSprite.material.dispose();
   }
 }

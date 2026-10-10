@@ -1,6 +1,6 @@
 {
-  "appId": "com.snowleopard.mountainhunter",
-  "appName": "Snow Leopard: Mountain Hunter",
+  "appId": "com.snowleopardworld.game",
+  "appName": "Snow Leopard World",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

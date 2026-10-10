@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { sounds } from './audio.js';
+import { shortestAngleDiff } from './utils.js';
+
+const _terrainNormal = new THREE.Vector3();
 
 // Procedural 3D Snow Leopard with Realistic Wildcraft Animations & Stats
 export class SnowLeopard {
@@ -23,7 +26,6 @@ export class SnowLeopard {
 
     // Movement & State
     this.position = new THREE.Vector3(0, 0, 0);
-    this.velocity = new THREE.Vector3(0, 0, 0);
     this.facingAngle = 0;
     this.walkSpeed = 6.5;
     this.sprintSpeed = 15.5;
@@ -35,14 +37,13 @@ export class SnowLeopard {
     this.isStalking = false;
     this.isPouncing = false;
     this.isSwiping = false;
-    this.isEating = false;
     this.pounceTimer = 0;
     this.pounceDuration = 0.65;
     this.pounceCooldown = 0;
     this.swipeTimer = 0;
     this.swipeDuration = 0.28;
     this.swipeCooldown = 0;
-    this.hungerRate = 0.4;
+    this.hungerRate = 0.4; // Overridden by Game.setDifficulty
     this.animTime = 0;
     this.crouchLerp = 0; // 0 = upright, 1 = crouched
 
@@ -316,7 +317,7 @@ export class SnowLeopard {
       lowerJoint.add(claw);
     }
 
-    return { root, lowerJoint, isBack, baseY: y };
+    return { root, lowerJoint };
   }
 
   createSnowPuffSystem() {
@@ -382,7 +383,6 @@ export class SnowLeopard {
     this.pounceTimer = this.pounceDuration;
     this.pounceCooldown = 1.8;
     this.stamina = Math.max(0, this.stamina - 25);
-    this.isEating = false;
 
     sounds.playPounce();
     return true;
@@ -395,7 +395,6 @@ export class SnowLeopard {
     this.swipeTimer = this.swipeDuration;
     this.swipeCooldown = 0.35;
     this.stamina = Math.max(0, this.stamina - 6);
-    this.isEating = false;
 
     sounds.playSwipe();
     return true;
@@ -403,7 +402,6 @@ export class SnowLeopard {
 
   eat(prey) {
     if (!prey || !prey.isDead || prey.meatAmount <= 0) return false;
-    this.isEating = true;
 
     // Consume meat chunk
     const consumed = Math.min(prey.meatAmount, 30);
@@ -419,7 +417,8 @@ export class SnowLeopard {
 
   addXp(amount) {
     this.xp += amount;
-    if (this.xp >= this.xpToNext) {
+    // A big reward (e.g. the boss) can be worth several levels at once
+    while (this.xp >= this.xpToNext) {
       this.levelUp();
     }
   }
@@ -438,7 +437,6 @@ export class SnowLeopard {
 
   takeDamage(amount) {
     this.hp = Math.max(0, this.hp - amount);
-    this.isEating = false;
     sounds.playAttackHit();
     if (this.hp <= 0) {
       // Survival respawn at mountain camp
@@ -509,18 +507,15 @@ export class SnowLeopard {
       if (isMoving && !this.isPouncing) {
         // Rotate towards input direction
         const targetAngle = Math.atan2(inputDir.x, inputDir.z);
-        // Shortest angle lerp
-        let diff = (targetAngle - this.facingAngle) % (Math.PI * 2);
-        if (diff < -Math.PI) diff += Math.PI * 2;
-        if (diff > Math.PI) diff -= Math.PI * 2;
-        this.facingAngle += diff * Math.min(1, delta * 12);
+        const diff = shortestAngleDiff(this.facingAngle, targetAngle);
+        this.facingAngle = shortestAngleDiff(0, this.facingAngle + diff * Math.min(1, delta * 12));
         this.turnVelocity = THREE.MathUtils.lerp(this.turnVelocity, diff, delta * 10);
       } else {
         this.turnVelocity = THREE.MathUtils.lerp(this.turnVelocity, 0, delta * 8);
       }
 
-      const moveForward = new THREE.Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
-      this.position.addScaledVector(moveForward, this.currentSpeed * delta);
+      this.position.x += Math.sin(this.facingAngle) * this.currentSpeed * delta;
+      this.position.z += Math.cos(this.facingAngle) * this.currentSpeed * delta;
 
       // Audio footstep
       sounds.playFootstep(this.isSprinting, this.isStalking);
@@ -555,7 +550,7 @@ export class SnowLeopard {
     this.mesh.rotation.y = this.facingAngle;
 
     // Orient mesh gently along terrain slope
-    const norm = this.terrain.getTerrainNormal(this.position.x, this.position.z);
+    const norm = this.terrain.getTerrainNormal(this.position.x, this.position.z, _terrainNormal);
     this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, (norm.z * 0.4), delta * 8);
     this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, (-norm.x * 0.4), delta * 8);
 
@@ -653,11 +648,13 @@ export class SnowLeopard {
       return;
     }
 
+    // Ease the head back to neutral after a pounce
+    this.head.rotation.x = THREE.MathUtils.lerp(this.head.rotation.x, 0, delta * 8);
+
     if (isMoving) {
       // Diagonal feline trot & gallop
       const swing = this.isSprinting ? 0.85 : (this.isStalking ? 0.35 : 0.55);
       const legSin = Math.sin(this.animTime);
-      const legCos = Math.cos(this.animTime);
 
       this.legs.frontLeft.root.rotation.x = legSin * swing;
       this.legs.frontRight.root.rotation.x = -legSin * swing;
@@ -672,6 +669,7 @@ export class SnowLeopard {
 
       // Spine bounce
       this.chest.position.y = 1.35 + Math.abs(legSin) * (this.isSprinting ? 0.2 : 0.06);
+      this.head.rotation.y = THREE.MathUtils.lerp(this.head.rotation.y, 0, delta * 8);
     } else {
       // Idle breathing and head sway
       const idleSin = Math.sin(this.animTime * 0.5);
@@ -694,6 +692,11 @@ export class SnowLeopard {
       this.legs.frontRight.root.rotation.y = 0.5 * slashArc;
       this.legs.frontRight.lowerJoint.rotation.x = 0.8 * slashArc;
       this.head.rotation.y = -0.25 * slashArc;
+    } else {
+      // Untwist the swiping leg once the swipe is over
+      const fr = this.legs.frontRight.root.rotation;
+      fr.y = THREE.MathUtils.lerp(fr.y, 0, delta * 10);
+      fr.z = THREE.MathUtils.lerp(fr.z, 0, delta * 10);
     }
   }
 }

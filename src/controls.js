@@ -34,6 +34,8 @@ export class InputManager {
   setupDesktop() {
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
+      // Held keys auto-repeat; only act on the initial press so toggles don't flicker
+      if (e.repeat) return;
 
       if (e.code === 'KeyC') {
         this.isStalking = !this.isStalking;
@@ -58,22 +60,17 @@ export class InputManager {
         this.isSprinting = false;
       }
     });
+
+    // Keyup never fires for keys held while the window loses focus, so release everything
+    window.addEventListener('blur', () => {
+      this.keys = {};
+      this.isSprinting = false;
+    });
   }
 
   setupMobile() {
     const joyContainer = document.getElementById('joystick-container');
     const joyKnob = document.getElementById('joystick-knob');
-
-    // Prevent default touch gestures (scrolling, zooming, pinch)
-    window.addEventListener(
-      'touchmove',
-      (e) => {
-        if (e.target.tagName !== 'INPUT') {
-          e.preventDefault();
-        }
-      },
-      { passive: false }
-    );
 
     // Touch start handler for joystick and camera drag
     window.addEventListener(
@@ -83,8 +80,8 @@ export class InputManager {
           const t = e.changedTouches[i];
           const target = document.elementFromPoint(t.clientX, t.clientY);
 
-          // If touching action buttons, let button handlers process it
-          if (target && target.closest('.action-btn')) {
+          // If touching action or difficulty buttons, let button handlers process it
+          if (target && target.closest('.action-btn, .diff-btn')) {
             continue;
           }
 
@@ -111,10 +108,11 @@ export class InputManager {
       { passive: false }
     );
 
-    // Touch move handler
+    // Touch move handler (also blocks default scrolling / pinch-zoom gestures)
     window.addEventListener(
       'touchmove',
       (e) => {
+        e.preventDefault();
         for (let i = 0; i < e.changedTouches.length; i++) {
           const t = e.changedTouches[i];
 
