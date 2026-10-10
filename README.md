@@ -1,5 +1,5 @@
 # Snow Leopard World 🐆❄️
-*A Wildcraft-inspired 3D animal simulator and mountain hunting RPG for Android and Web, built with Three.js and Capacitor.*
+*A 3D animal simulator and mountain hunting RPG for Android and Web, built with Three.js and Capacitor.*
 
 ---
 

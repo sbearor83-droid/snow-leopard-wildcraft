@@ -2,7 +2,7 @@
   "name": "snow-leopard-wildcraft",
   "version": "1.0.0",
   "private": true,
-  "description": "Wildcraft-inspired 3D snow leopard hunting game for web and Android (Three.js + Capacitor)",
+  "description": "3D snow leopard hunting game for web and Android (Three.js + Capacitor)",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
