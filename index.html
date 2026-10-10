@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1520" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="./manifest.json" />
+  <title>Snow Leopard: Mountain Hunter</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <!-- 3D Three.js WebGL Canvas -->
+  <div id="canvas-container"></div>
+
+  <!-- Scent Vision Frost / Predator Vignette -->
+  <div id="scent-overlay"></div>
+
+  <!-- HUD Overlays -->
+  <div class="hud-layer">
+    <!-- Top Bar: Player Stats & Hunting Compass & Quest Tracker -->
+    <header class="top-hud">
+      <!-- Player Profile Card -->
+      <div class="player-card">
+        <div class="avatar-badge">
+          🐾
+          <div class="level-badge" id="hud-level">Lv 1</div>
+        </div>
+        <div class="stat-bars">
+          <div class="stat-row">
+            <span>HP</span>
+            <div class="bar-container"><div class="bar-fill bar-hp" id="bar-hp" style="width: 100%;"></div></div>
+          </div>
+          <div class="stat-row">
+            <span>STM</span>
+            <div class="bar-container"><div class="bar-fill bar-stamina" id="bar-stamina" style="width: 100%;"></div></div>
+          </div>
+          <div class="stat-row">
+            <span>HGR</span>
+            <div class="bar-container"><div class="bar-fill bar-hunger" id="bar-hunger" style="width: 85%;"></div></div>
+          </div>
+          <div class="stat-row">
+            <span>XP</span>
+            <div class="bar-container"><div class="bar-fill bar-xp" id="bar-xp" style="width: 0%;"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mountain Compass & Scent Radar & Difficulty Mode -->
+      <div class="center-hud">
+        <div class="compass-bar">
+          <div class="compass-heading" id="compass-heading">NORTH</div>
+          <div class="prey-radar-text" id="prey-radar-text">Tracking Scent: Bharal Herd (45m)</div>
+        </div>
+
+        <div class="difficulty-toggle" id="difficulty-toggle">
+          <button class="diff-btn" data-diff="easy" title="Easy: Relaxed hunger, cautious prey">Easy</button>
+          <button class="diff-btn active" data-diff="medium" title="Medium: Standard wilderness">Med</button>
+          <button class="diff-btn" data-diff="hard" title="Hard: Savage hunger, alert prey, fierce bosses">Hard</button>
+        </div>
+      </div>
+
+      <!-- Active Hunting Quest -->
+      <div class="quest-card">
+        <div class="quest-title">Mountain Trial</div>
+        <div class="quest-desc" id="quest-desc">Stalk through the snow and take down prey to survive the winter.</div>
+        <div class="quest-count" id="quest-stats">Hunted: 0 | Fed: 0 kg</div>
+      </div>
+    </header>
+
+    <!-- Boss Health Bar Container (active when near Titan Yak) -->
+    <div id="boss-hud" class="boss-hud" style="display: none;">
+      <div class="boss-header">
+        <span class="boss-crown">👑</span>
+        <span class="boss-name">TITAN CRAG YAK</span>
+        <span class="boss-crown">👑</span>
+      </div>
+      <div class="boss-bar-track">
+        <div class="boss-bar-fill" id="boss-bar-fill" style="width: 100%;"></div>
+      </div>
+      <div class="boss-hp-label" id="boss-hp-label">300 / 300 HP</div>
+    </div>
+
+    <!-- Bottom Bar: Touch Joystick & Hunting Actions -->
+    <footer class="bottom-hud">
+      <!-- Touch Virtual Joystick Area -->
+      <div id="joystick-container">
+        <div id="joystick-knob"></div>
+      </div>
+
+      <!-- Controls helper hint for desktop / mobile -->
+      <div class="controls-hint">
+        WASD: Move | Shift: Sprint | C: Stalk | Space: Pounce | Q: Swipe | V: Scent | E: Eat
+      </div>
+
+      <!-- Wildcraft Mobile Action Cluster -->
+      <div class="action-cluster">
+        <button class="action-btn" id="btn-stalk" title="Stalk / Sneak (Silent movement)">
+          🐾
+          <span class="btn-label">Stalk</span>
+        </button>
+
+        <button class="action-btn" id="btn-sprint" title="Sprint (Fast burst)">
+          ⚡
+          <span class="btn-label">Sprint</span>
+        </button>
+
+        <button class="action-btn btn-attack" id="btn-pounce" title="Pounce Leap Attack (High Burst Damage)">
+          💥
+          <span class="btn-label">Pounce</span>
+        </button>
+
+        <button class="action-btn btn-swipe" id="btn-swipe" title="Paw Swipe (Close Melee Attack)">
+          🐾
+          <span class="btn-label">Swipe</span>
+        </button>
+
+        <button class="action-btn" id="btn-scent" title="Scent Vision (Track prey)">
+          👃
+          <span class="btn-label">Scent</span>
+        </button>
+
+        <button class="action-btn" id="btn-eat" title="Eat downed prey">
+          🍖
+          <span class="btn-label">Eat</span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Floating Combat Numbers & Alerts -->
+  <div class="floating-text-container" id="floating-text-container"></div>
+
+  <!-- Level Up Splash Notification -->
+  <div id="levelup-banner">
+    <h2>Level Up!</h2>
+    <p id="levelup-details">Stats Increased: +20 HP, +15 Stamina, +10 Attack Power!</p>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
