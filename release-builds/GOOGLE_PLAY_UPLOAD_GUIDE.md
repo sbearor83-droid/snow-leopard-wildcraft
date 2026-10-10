@@ -1,38 +1,45 @@
 # Google Play Store Upload & Release Guide 🚀
 
-Your game has been compiled and signed into production-ready Android artifacts.
-
----
-
-## 📁 Release Artifacts
-Located in: `C:\Users\bearo\.gemini\antigravity\scratch\snow-leopard-wildcraft\release-builds\`
+Built `.apk` / `.aab` files go in this folder but are **not committed to git** (see `.gitignore`).
+Attach them to a GitHub Release or upload them straight to the Play Console instead.
 
 | File | Purpose |
 | :--- | :--- |
-| **`SnowLeopard-MountainHunter.aab`** | **The file to upload to Google Play Console** (Android App Bundle format, required by Google). |
-| **`SnowLeopard-MountainHunter.apk`** | **Standalone installable APK** (can be sent to any Android phone via USB, Google Drive, or email and installed immediately). |
-| **`release.keystore`** | **The digital release certificate** used to sign the game. Keep this file safe! |
+| **`SnowLeopard-MountainHunter.aab`** | The file to upload to Google Play Console (Android App Bundle). |
+| **`SnowLeopard-MountainHunter.apk`** | Standalone installable APK for sideloading onto a phone. |
 
 ---
 
-## 🔑 Signing Certificate Credentials
-Store these securely. Google Play uses these to verify updates to your game:
+## 🔑 Signing Setup
 
-* **Keystore File:** `release.keystore`
-* **Keystore Password:** `snowleopard123`
-* **Key Alias:** `snowleopard`
-* **Key Password:** `snowleopard123`
-* **Package Name (Application ID):** `com.snowleopard.mountainhunter`
-* **Version Code:** `1`
-* **Version Name:** `1.0`
-* **Target SDK:** API 35 (Android 15 ready, exceeds Google Play API 34+ requirement)
+Signing credentials are **never** stored in source control. The release build reads them from
+`android/keystore.properties`, which is git-ignored.
+
+1. Create a release keystore (once), choosing a strong password:
+   ```bash
+   cd android/app
+   keytool -genkeypair -v -keystore release.keystore -alias snowleopard -keyalg RSA -keysize 2048 -validity 10000
+   ```
+   `*.keystore` files are git-ignored. **Back the keystore and its password up somewhere safe** (e.g. a password manager) — losing it means you can't sign updates.
+2. Copy `android/keystore.properties.example` to `android/keystore.properties` and fill in the password and alias.
+3. Build:
+   ```bash
+   npm run android
+   cd android
+   ./gradlew bundleRelease   # -> app/build/outputs/bundle/release/app-release.aab
+   ./gradlew assembleRelease # -> app/build/outputs/apk/release/app-release.apk
+   ```
+   (On Windows use `gradlew.bat`.)
+
+Enroll in **Play App Signing** when you create the app (the default). Google then holds the real app-signing key and your keystore is only the *upload* key, which Google can reset if it is ever lost or leaked.
+
+Before each new Play upload, bump `versionCode` (and usually `versionName`) in `android/app/build.gradle`.
 
 ---
 
 ## 📲 How to Upload to Google Play Developer Console
 
-1. **Log in to Google Play Console:**
-   * Go to [https://play.google.com/console](https://play.google.com/console).
+1. **Log in to Google Play Console:** [https://play.google.com/console](https://play.google.com/console).
 2. **Create New App:**
    * Click **Create app**.
    * App name: `Snow Leopard: Mountain Hunter`
@@ -42,14 +49,13 @@ Store these securely. Google Play uses these to verify updates to your game:
 3. **App Releases:**
    * In the left sidebar under *Release*, go to **Production** (or **Internal testing** / **Closed testing** for your first test run).
    * Click **Create new release**.
-   * Drag and drop `SnowLeopard-MountainHunter.aab` into the *App bundles* upload box.
-   * Release name will automatically populate as `1.0 (1)`.
-   * Add Release notes: *"Initial release of Snow Leopard: Mountain Hunter! Stalk through snowy mountain peaks, track herds with scent vision, and pounce on prey."*
+   * Drag and drop the `.aab` into the *App bundles* upload box.
+   * Add release notes, e.g. *"Initial release of Snow Leopard: Mountain Hunter! Stalk through snowy mountain peaks, track herds with scent vision, and pounce on prey."*
    * Click **Save** and **Review release**.
 4. **Store Presence & Listing:**
    * Under *Grow > Store presence > Main store listing*:
      * Short description: `3D Snow Leopard mountain hunting simulator with stealth and scent tracking.`
-     * Full description: Describe the game features (Mountain exploration, stalking herds of Himalayan Ibex and Snow Hares, Wildcraft-style scent vision, XP progression, and survival stats).
-     * Graphics: Add the app icon (512x512) and gameplay screenshots (captured from your browser or device).
+     * Full description: mountain exploration, stalking herds of Himalayan Ibex and Snow Hares, boss yaks, scent vision, XP progression, and survival stats.
+     * Graphics: app icon (512x512) and gameplay screenshots.
 5. **Roll out Release:**
-   * Once Google reviews your listing checklist (Content Rating, Target Audience, Privacy Policy), click **Start rollout to Production**!
+   * Once the listing checklist is complete (Content Rating, Target Audience, Privacy Policy), click **Start rollout to Production**.

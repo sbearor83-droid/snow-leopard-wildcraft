@@ -2,49 +2,49 @@
 class SoundManager {
   constructor() {
     this.ctx = null;
-    this.isMuted = false;
     this.windNode = null;
     this.lastStepTime = 0;
+    this.footstepBuffer = null;
   }
 
-  init() {
+  // Must be called from a user gesture (browsers block audio until then)
+  ensureContext() {
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        this.ctx = new AudioCtx();
-        this.startAmbientWind();
-      }
-    } else if (this.ctx.state === 'suspended') {
+      if (!AudioCtx) return;
+      this.ctx = new AudioCtx();
+      this.startAmbientWind();
+    }
+    if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
   }
 
-  ensureContext() {
-    if (!this.ctx) this.init();
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
+  // True when sounds can be played right now
+  isReady() {
+    return this.ctx !== null && this.ctx.state === 'running';
   }
 
   playFootstep(isSprinting = false, isStalking = false) {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
 
     const now = this.ctx.currentTime;
     const interval = isStalking ? 0.6 : (isSprinting ? 0.22 : 0.38);
     if (now - this.lastStepTime < interval) return;
     this.lastStepTime = now;
 
-    // Snow crunch: filtered white noise burst with quick decay
-    const bufferSize = this.ctx.sampleRate * 0.08;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+    // Snow crunch: filtered white noise burst with quick decay (generated once, reused)
+    if (!this.footstepBuffer) {
+      const bufferSize = Math.floor(this.ctx.sampleRate * 0.08);
+      this.footstepBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = this.footstepBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+      }
     }
 
     const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = this.footstepBuffer;
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -62,8 +62,7 @@ class SoundManager {
   }
 
   playPounce() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
 
     // 1. Whoosh leap sound (frequency ramp down)
@@ -82,7 +81,7 @@ class SoundManager {
     osc.stop(now + 0.36);
 
     // 2. Snow Leopard Growl / Snarl
-    const bufferSize = this.ctx.sampleRate * 0.4;
+    const bufferSize = Math.floor(this.ctx.sampleRate * 0.4);
     const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = noiseBuffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -108,8 +107,7 @@ class SoundManager {
   }
 
   playAttackHit() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
 
     // Thud impact
@@ -129,8 +127,7 @@ class SoundManager {
   }
 
   playSwipe() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
 
     // Fast claw swipe whoosh & scratch
@@ -150,8 +147,7 @@ class SoundManager {
   }
 
   playBossGrunt() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
 
     const osc = this.ctx.createOscillator();
@@ -170,8 +166,7 @@ class SoundManager {
   }
 
   playEat() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
 
     // Bite crunch
@@ -194,8 +189,7 @@ class SoundManager {
   }
 
   playPreyAlert() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
 
     const osc = this.ctx.createOscillator();
@@ -214,8 +208,7 @@ class SoundManager {
   }
 
   playScentSonar() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
 
     const freqs = [523.25, 659.25, 783.99, 1046.5]; // C E G C
@@ -236,8 +229,7 @@ class SoundManager {
   }
 
   playLevelUp() {
-    this.ensureContext();
-    if (!this.ctx || this.isMuted) return;
+    if (!this.isReady()) return;
     const now = this.ctx.currentTime;
     const notes = [440, 554.37, 659.25, 880];
     notes.forEach((freq, idx) => {

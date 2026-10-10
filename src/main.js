@@ -7,6 +7,16 @@ import { InputManager } from './controls.js';
 import { ScentVision } from './scent.js';
 import { sounds } from './audio.js';
 
+const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
+
+function detectMobile() {
+  return /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
+}
+
+function pixelRatioFor(isMobile) {
+  return isMobile ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5);
+}
+
 // Main Game Controller
 class Game {
   constructor() {
@@ -19,7 +29,7 @@ class Game {
 
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 800);
 
-    const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
+    const isMobile = detectMobile();
     this.isMobile = isMobile;
 
     this.renderer = new THREE.WebGLRenderer({
@@ -29,7 +39,7 @@ class Game {
       stencil: false
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(isMobile ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(pixelRatioFor(isMobile));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -54,15 +64,14 @@ class Game {
     this.terrain = new MountainEnvironment(this.scene);
     this.player = new SnowLeopard(this.scene, this.terrain);
     this.preyManager = new PreyManager(this.scene, this.terrain);
-    this.gameCam = new GameCamera(this.camera, this.renderer.domElement, this.terrain);
+    this.gameCam = new GameCamera(this.camera, this.terrain);
     this.input = new InputManager(this.gameCam);
     this.scentVision = new ScentVision(this.scene);
 
     // Track state
-    this.difficulty = 'medium';
-    this.nearestDownedPrey = null;
-    this.lastPounceHitCheck = false;
+    this.pounceHasHit = false;
     this.lastLevelSeen = 1;
+    this.hudCache = new Map(); // element -> { prop: lastValue }, avoids redundant DOM writes
 
     // Boss ramming reaction callback
     this.player.onRammed = (ramDmg) => {
@@ -76,12 +85,8 @@ class Game {
     // Window Resize Event
     window.addEventListener('resize', () => this.onResize());
 
-    // User interaction unlock audio context
-    const unlockAudio = () => {
-      sounds.ensureContext();
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
-    };
+    // Audio may only start (or resume after the OS suspends it) from a user gesture
+    const unlockAudio = () => sounds.ensureContext();
     window.addEventListener('pointerdown', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
 
@@ -91,7 +96,6 @@ class Game {
   }
 
   setDifficulty(diff) {
-    this.difficulty = diff;
     this.preyManager.setDifficulty(diff);
 
     if (diff === 'easy') {
@@ -106,7 +110,7 @@ class Game {
       b.classList.toggle('active', b.dataset.diff === diff);
     });
 
-    const diffNames = { easy: 'Easy (Plentiful Prey)', medium: 'Medium (Wilderness Balanced)', hard: 'Hard (Apex Challenge)' };
+    const diffNames = { easy: 'Easy (Relaxed Hunt)', medium: 'Medium (Wilderness Balanced)', hard: 'Hard (Apex Challenge)' };
     this.spawnFloatingText(`Mode: ${diffNames[diff] || diff}`, '#38bdf8', {
       x: window.innerWidth * 0.5,
       y: 110
@@ -197,48 +201,46 @@ class Game {
     return { x, y };
   }
 
-  checkPounceAttack() {
-    // When Snow Leopard is pouncing, hit detection runs forward in leap arc
-    if (!this.player.isPouncing) {
-      this.lastPounceHitCheck = false;
-      return;
-    }
-
-    if (this.lastPounceHitCheck) return; // already struck during this pounce leap
-
-    const attackRange = 3.6;
+  // Hits the first living prey within range and in front of the leopard. Returns true on a hit.
+  strikeNearbyPrey(range, minDot, damageMult, damageSpread, label, color) {
     const forward = new THREE.Vector3(Math.sin(this.player.facingAngle), 0, Math.cos(this.player.facingAngle));
+    const toPrey = new THREE.Vector3();
 
     for (const prey of this.preyManager.preyList) {
       if (prey.isDead) continue;
-      const toPrey = prey.position.clone().sub(this.player.position);
+      toPrey.subVectors(prey.position, this.player.position);
       const dist = toPrey.length();
+      if (dist >= range || forward.dot(toPrey.divideScalar(dist || 1)) <= minDot) continue;
 
-      if (dist < attackRange) {
-        toPrey.normalize();
-        const dot = forward.dot(toPrey);
-        if (dot > 0.35) {
-          // DIRECT POUNCE HIT! Heavy burst damage
-          this.lastPounceHitCheck = true;
-          const damage = Math.round(this.player.attackPower * 1.8 * (0.95 + Math.random() * 0.25));
-          prey.takeDamage(damage);
+      const damage = Math.round(this.player.attackPower * damageMult * (damageSpread + Math.random() * 0.25));
+      prey.takeDamage(damage);
 
-          const screenPos = this.getScreenCoords(prey.position);
-          this.spawnFloatingText(`POUNCE! -${damage} HP`, '#ef4444', screenPos);
+      const screenPos = this.getScreenCoords(prey.position);
+      this.spawnFloatingText(`${label}! -${damage} HP`, color, screenPos);
 
-          if (prey.isDead) {
-            this.player.preyHunted += 1;
-            const xp = prey.xpReward || (prey.isBoss ? 350 : (prey.type === 'ibex' ? 85 : 45));
-            this.spawnFloatingText(`+${xp} XP${prey.isBoss ? ' 👑 BOSS SLAIN!' : ''}`, '#a855f7', {
-              x: screenPos.x,
-              y: screenPos.y - 30
-            });
-            this.player.addXp(xp);
-          }
-          break;
-        }
+      if (prey.isDead) {
+        this.player.preyHunted += 1;
+        this.spawnFloatingText(`+${prey.xpReward} XP${prey.isBoss ? ' 👑 BOSS SLAIN!' : ''}`, '#a855f7', {
+          x: screenPos.x,
+          y: screenPos.y - 30
+        });
+        this.player.addXp(prey.xpReward);
       }
+      return true;
     }
+    return false;
+  }
+
+  checkPounceAttack() {
+    // When Snow Leopard is pouncing, hit detection runs forward in leap arc (one hit per pounce)
+    if (!this.player.isPouncing) {
+      this.pounceHasHit = false;
+      return;
+    }
+    if (this.pounceHasHit) return;
+
+    // Heavy burst damage
+    this.pounceHasHit = this.strikeNearbyPrey(3.6, 0.35, 1.8, 0.95, 'POUNCE', '#ef4444');
   }
 
   checkSwipeAttack() {
@@ -246,41 +248,33 @@ class Game {
     this.input.isSwipeRequested = false;
 
     // Trigger leopard claw swipe animation & sound
-    const swiped = this.player.pawSwipe();
-    if (!swiped) return;
+    if (!this.player.pawSwipe()) return;
 
-    const attackRange = 2.7; // Close-range melee reach
-    const forward = new THREE.Vector3(Math.sin(this.player.facingAngle), 0, Math.cos(this.player.facingAngle));
+    // Close-range melee: fast, lower damage
+    this.strikeNearbyPrey(2.7, 0.2, 0.65, 0.9, 'SWIPE', '#f59e0b');
+  }
 
-    for (const prey of this.preyManager.preyList) {
-      if (prey.isDead) continue;
-      const toPrey = prey.position.clone().sub(this.player.position);
-      const dist = toPrey.length();
+  setText(el, text) {
+    this.setStyle(el, 'textContent', text);
+  }
 
-      if (dist < attackRange) {
-        toPrey.normalize();
-        const dot = forward.dot(toPrey);
-        if (dot > 0.2) {
-          // CLOSE MELEE PAW SWIPE HIT! Fast lower damage
-          const damage = Math.round(this.player.attackPower * 0.65 * (0.9 + Math.random() * 0.25));
-          prey.takeDamage(damage);
-
-          const screenPos = this.getScreenCoords(prey.position);
-          this.spawnFloatingText(`SWIPE! -${damage} HP`, '#f59e0b', screenPos);
-
-          if (prey.isDead) {
-            this.player.preyHunted += 1;
-            const xp = prey.xpReward || (prey.isBoss ? 350 : (prey.type === 'ibex' ? 85 : 45));
-            this.spawnFloatingText(`+${xp} XP${prey.isBoss ? ' 👑 BOSS SLAIN!' : ''}`, '#a855f7', {
-              x: screenPos.x,
-              y: screenPos.y - 30
-            });
-            this.player.addXp(xp);
-          }
-          break;
-        }
-      }
+  // Writes a style property (or 'textContent') only when its value changed since last frame
+  setStyle(el, prop, value) {
+    if (!el) return;
+    let cache = this.hudCache.get(el);
+    if (!cache) {
+      cache = {};
+      this.hudCache.set(el, cache);
     }
+    if (cache[prop] === value) return;
+    cache[prop] = value;
+    if (prop === 'textContent') el.textContent = value;
+    else el.style[prop] = value;
+  }
+
+  setBarWidth(el, value, max) {
+    const pct = Math.min(100, Math.max(0, (value / max) * 100));
+    this.setStyle(el, 'width', `${pct.toFixed(1)}%`);
   }
 
   updateInteractionPrompts() {
@@ -298,10 +292,8 @@ class Game {
       }
     }
 
-    this.nearestDownedPrey = nearestCarcass;
-
     if (nearestCarcass) {
-      if (this.btnEat) this.btnEat.style.display = 'flex';
+      this.setStyle(this.btnEat, 'display', 'flex');
       // Feed action requested
       if (this.input.isEatRequested) {
         this.input.isEatRequested = false;
@@ -312,7 +304,7 @@ class Game {
         }
       }
     } else {
-      if (this.btnEat) this.btnEat.style.display = 'none';
+      this.setStyle(this.btnEat, 'display', 'none');
       this.input.isEatRequested = false;
     }
 
@@ -330,68 +322,60 @@ class Game {
   }
 
   updateHUD() {
+    const player = this.player;
+
     // Stat Bars
-    this.barHp.style.width = `${Math.max(0, (this.player.hp / this.player.maxHp) * 100)}%`;
-    this.barStamina.style.width = `${Math.max(0, (this.player.stamina / this.player.maxStamina) * 100)}%`;
-    this.barHunger.style.width = `${Math.max(0, (this.player.hunger / this.player.maxHunger) * 100)}%`;
-    this.barXp.style.width = `${Math.max(0, (this.player.xp / this.player.xpToNext) * 100)}%`;
-    this.hudLevel.innerText = `Lv ${this.player.level}`;
+    this.setBarWidth(this.barHp, player.hp, player.maxHp);
+    this.setBarWidth(this.barStamina, player.stamina, player.maxStamina);
+    this.setBarWidth(this.barHunger, player.hunger, player.maxHunger);
+    this.setBarWidth(this.barXp, player.xp, player.xpToNext);
+    this.setText(this.hudLevel, `Lv ${player.level}`);
 
     // Level up check
-    if (this.player.level > this.lastLevelSeen) {
-      this.lastLevelSeen = this.player.level;
-      this.showLevelUpBanner(this.player.level);
+    if (player.level > this.lastLevelSeen) {
+      this.lastLevelSeen = player.level;
+      this.showLevelUpBanner(player.level);
     }
 
     // Toggle button UI active states
-    if (this.btnStalk) {
-      this.btnStalk.classList.toggle('active', this.player.isStalking);
-    }
-    if (this.btnSprint) {
-      this.btnSprint.classList.toggle('active', this.player.isSprinting);
-    }
+    if (this.btnStalk) this.btnStalk.classList.toggle('active', player.isStalking);
+    if (this.btnSprint) this.btnSprint.classList.toggle('active', player.isSprinting);
 
     // Compass Cardinal Heading
     const camAngle = ((this.gameCam.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    const headings = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
     const idx = Math.round((camAngle / (Math.PI * 2)) * 8) % 8;
-    this.compassHeading.innerText = headings[idx];
+    this.setText(this.compassHeading, COMPASS_HEADINGS[idx]);
 
     // Boss Yak Health Bar HUD (displays when near living boss)
-    const { boss, distance: bossDist } = this.preyManager.getNearestBoss(this.player.position);
-    if (this.bossHud) {
-      if (boss && !boss.isDead && bossDist < 48) {
-        this.bossHud.style.display = 'flex';
-        const hpPct = Math.max(0, (boss.hp / boss.maxHp) * 100);
-        if (this.bossBarFill) this.bossBarFill.style.width = `${hpPct}%`;
-        if (this.bossHpLabel) this.bossHpLabel.innerText = `${boss.hp} / ${boss.maxHp} HP`;
-      } else {
-        this.bossHud.style.display = 'none';
-      }
+    const { prey: boss, distance: bossDist } = this.preyManager.getNearestLiving(player.position, true);
+    if (boss && bossDist < 48) {
+      this.setStyle(this.bossHud, 'display', 'flex');
+      this.setBarWidth(this.bossBarFill, boss.hp, boss.maxHp);
+      this.setText(this.bossHpLabel, `${Math.max(0, boss.hp)} / ${boss.maxHp} HP`);
+    } else {
+      this.setStyle(this.bossHud, 'display', 'none');
     }
 
     // Nearest Prey Scent Radar
-    const { prey, distance } = this.preyManager.getNearestPrey(this.player.position);
+    const { prey, distance } = this.preyManager.getNearestLiving(player.position);
     if (prey) {
-      const isBoss = prey.isBoss;
-      const name = isBoss ? '👑 Titan Crag Yak (BOSS)' : (prey.type === 'ibex' ? 'Himalayan Ibex' : 'Snow Hare');
-      this.preyRadarText.innerText = `Scent: ${name} (${Math.round(distance)}m)`;
-      this.preyRadarText.style.color = isBoss ? '#fbbf24' : '#38bdf8';
+      const name = prey.isBoss ? '👑 Titan Crag Yak (BOSS)' : prey.name;
+      this.setText(this.preyRadarText, `Scent: ${name} (${Math.round(distance)}m)`);
+      this.setStyle(this.preyRadarText, 'color', prey.isBoss ? '#fbbf24' : '#38bdf8');
     } else {
-      this.preyRadarText.innerText = 'All nearby prey hunted';
-      this.preyRadarText.style.color = '#94a3b8';
+      this.setText(this.preyRadarText, 'All nearby prey hunted');
+      this.setStyle(this.preyRadarText, 'color', '#94a3b8');
     }
 
     // Quest tracker
-    this.questStats.innerText = `Hunted: ${this.player.preyHunted} | Fed: ${this.player.meatConsumed} kg`;
+    this.setText(this.questStats, `Hunted: ${player.preyHunted} | Fed: ${player.meatConsumed} kg`);
   }
 
   onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
-    this.renderer.setPixelRatio(isMobile ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(pixelRatioFor(detectMobile()));
   }
 
   animate() {

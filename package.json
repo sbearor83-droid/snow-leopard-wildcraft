@@ -1,19 +1,22 @@
 {
   "name": "snow-leopard-wildcraft",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "Wildcraft-inspired 3D snow leopard hunting game for web and Android (Three.js + Capacitor)",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "android": "vite build && npx cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
-    "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
-    "three": "^0.186.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "vite": "^8.3.4"
   }
 }

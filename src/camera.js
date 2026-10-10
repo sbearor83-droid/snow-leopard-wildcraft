@@ -2,9 +2,8 @@ import * as THREE from 'three';
 
 // Wildcraft 3rd Person Orbit & Terrain-Aware Follow Camera
 export class GameCamera {
-  constructor(camera, domElement, terrain) {
+  constructor(camera, terrain) {
     this.camera = camera;
-    this.domElement = domElement;
     this.terrain = terrain;
 
     this.target = new THREE.Vector3(0, 2, 0);
@@ -18,6 +17,8 @@ export class GameCamera {
     this.maxPitch = 1.25;
 
     this.smoothPos = new THREE.Vector3(0, 5, 10);
+    this.desiredPos = new THREE.Vector3();
+    this.targetLookAt = new THREE.Vector3();
     this.baseFov = 60;
     this.camera.fov = this.baseFov;
 
@@ -29,10 +30,10 @@ export class GameCamera {
     let lastX = 0;
     let lastY = 0;
 
-    // Desktop Mouse Drag Orbit (Right button or left drag outside joystick)
+    // Desktop Mouse Drag Orbit (any button, outside the HUD)
     window.addEventListener('mousedown', (e) => {
-      // Don't intercept UI buttons or virtual joystick
-      if (e.target.closest('#joystick-container, .action-btn, #top-hud')) return;
+      // Don't intercept UI buttons, the HUD or the virtual joystick
+      if (e.target.closest('#joystick-container, .action-btn, .top-hud')) return;
       isDragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
@@ -66,8 +67,8 @@ export class GameCamera {
 
   update(delta, playerPos, isSprinting, isPouncing) {
     // Follow player chest
-    const targetLookAt = playerPos.clone().add(new THREE.Vector3(0, 1.6, 0));
-    this.target.lerp(targetLookAt, delta * 10);
+    this.targetLookAt.set(playerPos.x, playerPos.y + 1.6, playerPos.z);
+    this.target.lerp(this.targetLookAt, delta * 10);
 
     // Calculate desired camera orbit offset
     const cosPitch = Math.cos(this.pitch);
@@ -75,7 +76,7 @@ export class GameCamera {
     const offsetY = Math.sin(this.pitch) * this.distance;
     const offsetZ = Math.cos(this.yaw) * cosPitch * this.distance;
 
-    let desiredPos = this.target.clone().add(new THREE.Vector3(offsetX, offsetY, offsetZ));
+    const desiredPos = this.desiredPos.set(this.target.x + offsetX, this.target.y + offsetY, this.target.z + offsetZ);
 
     // Terrain Collision Avoidance: prevent camera clipping through snow rocks
     const groundAtCam = this.terrain.getTerrainHeight(desiredPos.x, desiredPos.z);

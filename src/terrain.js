@@ -6,9 +6,7 @@ export class MountainEnvironment {
     this.scene = scene;
     this.worldSize = worldSize;
     this.halfSize = worldSize / 2;
-    this.rocks = [];
-    this.trees = [];
-    this.obstacles = [];
+    this.obstacles = []; // Circles ({ x, z, radius }) used for collision
 
     this.createTerrain();
     this.createDecorations();
@@ -38,15 +36,14 @@ export class MountainEnvironment {
     return h;
   }
 
-  getTerrainNormal(x, z) {
+  getTerrainNormal(x, z, target = new THREE.Vector3()) {
     const delta = 0.5;
     const hL = this.getTerrainHeight(x - delta, z);
     const hR = this.getTerrainHeight(x + delta, z);
     const hD = this.getTerrainHeight(x, z - delta);
     const hU = this.getTerrainHeight(x, z + delta);
 
-    const normal = new THREE.Vector3(hL - hR, 2 * delta, hD - hU).normalize();
-    return normal;
+    return target.set(hL - hR, 2 * delta, hD - hU).normalize();
   }
 
   createTerrainTexture() {
@@ -99,17 +96,19 @@ export class MountainEnvironment {
     const rockColor = new THREE.Color(0x737e8c);
     const cliffColor = new THREE.Color(0x4a535e);
 
+    const normal = new THREE.Vector3();
+    const col = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       const y = this.getTerrainHeight(x, z);
       pos.setY(i, y);
 
-      // Slope-based and height-based coloring
-      const normal = this.getTerrainNormal(x, z);
+      // Slope-based coloring
+      this.getTerrainNormal(x, z, normal);
       const steepness = 1.0 - normal.y; // 0 is flat, 1 is vertical cliff
 
-      let col = snowColor.clone();
+      col.copy(snowColor);
       if (steepness > 0.45) {
         col.lerp(cliffColor, Math.min(1, (steepness - 0.45) * 3));
       } else if (steepness > 0.25) {
@@ -147,11 +146,6 @@ export class MountainEnvironment {
       flatShading: true
     });
 
-    const snowCapMat = new THREE.MeshStandardMaterial({
-      color: 0xf0f5fa,
-      roughness: 0.8
-    });
-
     // 1. Rocky Crags and Boulders (great for stalking and hunting)
     const rockInstanced = new THREE.InstancedMesh(rockGeo, rockMat, 130);
     rockInstanced.castShadow = true;
@@ -176,8 +170,7 @@ export class MountainEnvironment {
 
       rockInstanced.setMatrixAt(i, dummy.matrix);
       const rockRadius = Math.max(scaleX, scaleZ) * 0.72;
-      this.rocks.push({ position: dummy.position.clone(), radius: rockRadius });
-      this.obstacles.push({ x, z, radius: rockRadius, type: 'rock' });
+      this.obstacles.push({ x, z, radius: rockRadius });
     }
     this.scene.add(rockInstanced);
 
@@ -262,8 +255,7 @@ export class MountainEnvironment {
       }
 
       const trunkRadius = 0.68 * s;
-      this.trees.push({ position: new THREE.Vector3(x, y, z), radius: trunkRadius });
-      this.obstacles.push({ x, z, radius: trunkRadius, type: 'tree' });
+      this.obstacles.push({ x, z, radius: trunkRadius });
       treeCount++;
     }
 
