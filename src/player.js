@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { sounds } from './audio.js';
 import { shortestAngleDiff } from './utils.js';
 
 const _terrainNormal = new THREE.Vector3();
 
-// Procedural 3D Snow Leopard with Realistic Wildcraft Animations & Stats
+// Realistic 3D Snow Leopard with Skinned Mesh, Skeletal Animations & Wildcraft Survival Mechanics
 export class SnowLeopard {
   constructor(scene, terrain) {
     this.scene = scene;
@@ -19,12 +20,12 @@ export class SnowLeopard {
     this.maxStamina = 100;
     this.stamina = 100;
     this.maxHunger = 100;
-    this.hunger = 85; // Starts with mild hunger to encourage first hunt
+    this.hunger = 85;
     this.attackPower = 35;
     this.preyHunted = 0;
     this.meatConsumed = 0;
-    this.isDowned = false; // True from death until the player chooses how to respawn
-    this.onDeath = null; // Set by Game to show the death screen
+    this.isDowned = false;
+    this.onDeath = null;
 
     // Movement & State
     this.position = new THREE.Vector3(0, 0, 0);
@@ -40,21 +41,29 @@ export class SnowLeopard {
     this.isPouncing = false;
     this.isSwiping = false;
     this.pounceTimer = 0;
-    this.pounceDuration = 0.65;
+    this.pounceDuration = 0.70;
     this.pounceCooldown = 0;
     this.swipeTimer = 0;
-    this.swipeDuration = 0.28;
+    this.swipeDuration = 0.35;
     this.swipeCooldown = 0;
-    this.hungerRate = 0.4; // Overridden by Game.setDifficulty
+    this.hungerRate = 0.4;
     this.animTime = 0;
-    this.crouchLerp = 0; // 0 = upright, 1 = crouched
+
+    // Root node added to the scene
+    this.mesh = new THREE.Group();
+    this.scene.add(this.mesh);
 
     // Snow puff particles on sprint/pounce
     this.createSnowPuffSystem();
 
-    // Build the 3D Snow Leopard Mesh Hierarchy
-    this.mesh = this.buildModel();
-    this.scene.add(this.mesh);
+    // 3D Luminous Claw Slash Arc Effect
+    this.createClawSlashEffect();
+
+    // Load the Authentic 3D Snow Leopard Model & Animations
+    this.actions = {};
+    this.currentActionName = '';
+    this.modelLoaded = false;
+    this.loadModel();
 
     // Initial position on mountain ground
     const startY = this.terrain.getTerrainHeight(0, 0);
@@ -62,413 +71,124 @@ export class SnowLeopard {
     this.mesh.position.copy(this.position);
   }
 
-  // Generates high-definition authentic Snow Leopard rosette spotted fur texture
-  // Note: Cylinder UV maps U (X-axis) around the circumference: 0 (spine) -> 0.25 (flank) -> 0.5 (belly) -> 0.75 (flank) -> 1.0 (spine)
-  createFurTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 1024;
-    const ctx = canvas.getContext('2d');
+  loadModel() {
+    this.modelRoot = new THREE.Group();
+    // Offset model so snowshoe paws rest naturally on the terrain
+    this.modelRoot.position.set(0, 0.638, 0);
+    this.mesh.add(this.modelRoot);
 
-    // 1. Horizontal Circumferential Gradient: Spine (top) -> Flank (sides) -> Belly (bottom) -> Spine
-    const grad = ctx.createLinearGradient(0, 0, 1024, 0);
-    grad.addColorStop(0.00, '#a8b5c2'); // Dorsal spine (smoky-slate alpine grey)
-    grad.addColorStop(0.12, '#c4b8a7'); // Upper dorsal transition (warm golden-tan wash)
-    grad.addColorStop(0.28, '#dce3ea'); // Flank (pale silver-cream)
-    grad.addColorStop(0.44, '#f6f9fc'); // Lower flank fading to white
-    grad.addColorStop(0.50, '#ffffff'); // Ventral midline (pure snow-white underbelly)
-    grad.addColorStop(0.56, '#f6f9fc'); // Lower flank fading to white
-    grad.addColorStop(0.72, '#dce3ea'); // Opposite flank (pale silver-cream)
-    grad.addColorStop(0.88, '#c4b8a7'); // Upper dorsal transition (warm golden-tan wash)
-    grad.addColorStop(1.00, '#a8b5c2'); // Returning to dorsal spine midline
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1024, 1024);
+    const textureLoader = new THREE.TextureLoader();
+    const bumpMap = textureLoader.load('/snow_leopard_bump.png');
+    const roughnessMap = textureLoader.load('/snow_leopard_roughness.png');
 
-    // 2. Microscopic dense winter underfur grain
-    for (let i = 0; i < 28000; i++) {
-      const x = Math.random() * 1024;
-      const y = Math.random() * 1024;
-      // Belly has softer, whiter fur; back has darker guard hairs
-      const isBelly = Math.abs(x - 512) < 90;
-      if (isBelly) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-      } else {
-        ctx.fillStyle = Math.random() > 0.45 ? 'rgba(165, 182, 200, 0.22)' : 'rgba(255, 255, 255, 0.40)';
+    const loader = new GLTFLoader();
+    loader.load(
+      '/snow_leopard.glb',
+      (gltf) => {
+        const model = gltf.scene;
+        this.skinnedMesh = null;
+
+        model.traverse((child) => {
+          if (child.isSkinnedMesh) {
+            this.skinnedMesh = child;
+            child.castShadow = true;
+            child.receiveShadow = true;
+
+            // Apply realistic physically-based alpine fur material
+            if (child.material) {
+              child.material.roughness = 0.82;
+              child.material.metalness = 0.02;
+              child.material.bumpMap = bumpMap;
+              child.material.bumpScale = 0.024;
+              child.material.roughnessMap = roughnessMap;
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+
+        // Add 3D tactile feline whiskers to the snout whisker pads
+        this.addTactileWhiskers(model);
+
+        this.modelRoot.add(model);
+
+        // Setup Animation Mixer & Actions
+        if (gltf.animations && gltf.animations.length > 0) {
+          this.mixer = new THREE.AnimationMixer(model);
+
+          gltf.animations.forEach((clip) => {
+            const action = this.mixer.clipAction(clip);
+            this.actions[clip.name] = action;
+
+            // Configure non-looping action properties
+            if (clip.name === 'Pounce' || clip.name === 'Attack_Right' || clip.name === 'Attack_Left' || clip.name === 'Bite') {
+              action.setLoop(THREE.LoopOnce, 1);
+              action.clampWhenFinished = false;
+            } else if (clip.name === 'Death') {
+              action.setLoop(THREE.LoopOnce, 1);
+              action.clampWhenFinished = true;
+            }
+          });
+
+          // Start in serene, alert standing idle
+          this.playAction('Idle_Look', 0.1);
+        }
+
+        this.modelLoaded = true;
+      },
+      undefined,
+      (err) => {
+        console.error('Error loading snow leopard model:', err);
       }
-      ctx.fillRect(x, y, 2.0, 2.0);
-    }
-
-    // 3. Authentic Snow Leopard Rosettes (concentrated on flanks: X in [120, 390] and [630, 900])
-    for (let i = 0; i < 180; i++) {
-      const side = Math.random() > 0.5 ? 1 : -1;
-      const rx = side === 1 ? (130 + Math.random() * 250) : (640 + Math.random() * 250);
-      const ry = 40 + Math.random() * 850;
-      const radius = 14 + Math.random() * 22;
-      const numPetals = 4 + Math.floor(Math.random() * 3);
-
-      ctx.save();
-      ctx.translate(rx, ry);
-
-      // Warm taupe-sepia shadowed center inside rosette
-      ctx.fillStyle = 'rgba(162, 144, 130, 0.48)';
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Outer ring of charcoal spot petals
-      for (let p = 0; p < numPetals; p++) {
-        const angle = (p / numPetals) * Math.PI * 2 + (Math.random() - 0.5) * 0.45;
-        const px = Math.cos(angle) * radius;
-        const py = Math.sin(angle) * radius;
-        ctx.fillStyle = '#1e2126';
-        ctx.beginPath();
-        ctx.arc(px, py, 4.2 + Math.random() * 3.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    // 4. Spinal streak spots along dorsal midline (X near 0 and 1024)
-    for (let i = 0; i < 65; i++) {
-      const x = Math.random() > 0.5 ? Math.random() * 60 : 1024 - Math.random() * 60;
-      const y = Math.random() * 1024;
-      ctx.fillStyle = '#1c1f24';
-      ctx.beginPath();
-      ctx.arc(x, y, 4.0 + Math.random() * 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 5. Solid dark spots on lower limbs, face, and head
-    for (let i = 0; i < 280; i++) {
-      const sx = Math.random() * 1024;
-      // Avoid clean belly stripe
-      if (Math.abs(sx - 512) < 70) continue;
-      const sy = Math.random() * 1024;
-      ctx.fillStyle = '#1a1c20';
-      ctx.beginPath();
-      ctx.arc(sx, sy, 3.2 + Math.random() * 3.8, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 6. Tail ring bands across the lower section
-    for (let r = 0; r < 6; r++) {
-      ctx.fillStyle = 'rgba(24, 27, 32, 0.75)';
-      ctx.fillRect(0, 910 + r * 18, 1024, 11);
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    return tex;
+    );
   }
 
-  // Generates procedural bump map for alpine fur grain and rosette depth
-  createFurBumpMap() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
+  // Adds authentic curved sensory vibrissae radiating from the velvet whisker pads
+  addTactileWhiskers(model) {
+    const whiskerGroup = new THREE.Group();
+    // Snout whisker pad position in model local coordinates
+    whiskerGroup.position.set(0, 0.22, 0.88);
 
-    ctx.fillStyle = '#808080';
-    ctx.fillRect(0, 0, 512, 512);
+    const whiskerMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.85
+    });
 
-    // Fine fur grain embossing
-    for (let i = 0; i < 16000; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.16)';
-      ctx.fillRect(x, y, 2, 2);
+    const whiskerGeo = new THREE.CylinderGeometry(0.003, 0.001, 0.38, 4);
+    whiskerGeo.rotateZ(Math.PI / 2);
+
+    for (let side = -1; side <= 1; side += 2) {
+      for (let w = 0; w < 4; w++) {
+        const whisker = new THREE.Mesh(whiskerGeo, whiskerMat);
+        const pitch = (w - 1.5) * 0.14;
+        const splay = side * (0.28 + w * 0.12);
+        whisker.position.set(side * 0.08, (w - 1.5) * 0.025, (w - 1.5) * 0.015);
+        whisker.rotation.set(pitch, splay, side * -0.12);
+        whiskerGroup.add(whisker);
+      }
     }
 
-    // Embossed rosette rims on flanks
-    for (let i = 0; i < 90; i++) {
-      const side = Math.random() > 0.5 ? 1 : -1;
-      const rx = side === 1 ? (65 + Math.random() * 125) : (320 + Math.random() * 125);
-      const ry = 30 + Math.random() * 450;
-      const r = 7 + Math.random() * 12;
-
-      ctx.strokeStyle = 'rgba(40, 40, 40, 0.38)';
-      ctx.lineWidth = 3.2;
-      ctx.beginPath();
-      ctx.arc(rx, ry, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    return tex;
+    model.add(whiskerGroup);
   }
 
-  buildModel() {
-    const group = new THREE.Group();
-    const furTex = this.createFurTexture();
-    const bumpTex = this.createFurBumpMap();
+  playAction(name, crossFadeDuration = 0.2) {
+    if (!this.actions || !this.actions[name] || this.currentActionName === name) return;
 
-    const bodyMat = new THREE.MeshStandardMaterial({
-      map: furTex,
-      bumpMap: bumpTex,
-      bumpScale: 0.028,
-      roughness: 0.82,
-      metalness: 0.02
-    });
+    const prevAction = this.actions[this.currentActionName];
+    const nextAction = this.actions[name];
 
-    const whiteFurMat = new THREE.MeshStandardMaterial({
-      color: 0xf6f9fc,
-      bumpMap: bumpTex,
-      bumpScale: 0.022,
-      roughness: 0.86,
-      metalness: 0.01
-    });
+    nextAction.reset();
+    nextAction.fadeIn(crossFadeDuration);
+    nextAction.play();
 
-    const darkMat = new THREE.MeshStandardMaterial({
-      color: 0x181a1f,
-      roughness: 0.55
-    });
-
-    // Authentic Snow Leopard Eyes: Pale icy glacial green-grey with subtle teal tint (NOT yellow/amber!)
-    const eyeMat = new THREE.MeshStandardMaterial({
-      color: 0x7faea2,
-      roughness: 0.12,
-      metalness: 0.15
-    });
-
-    const noseMat = new THREE.MeshStandardMaterial({
-      color: 0x3d3737, // Slate dark feline leather nose pad
-      roughness: 0.62
-    });
-
-    // Helper: Sculpted organic cylinder lying along the Z-axis with smooth feline contour
-    const createOrganicVolume = (rTop, rBottom, length, radSegs = 16, hSegs = 6, scaleX = 1.0, scaleY = 1.0, dorsalPeak = 1.05) => {
-      const geo = new THREE.CylinderGeometry(rTop, rBottom, length, radSegs, hSegs);
-      geo.rotateX(Math.PI / 2);
-      const pos = geo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        let x = pos.getX(i);
-        let y = pos.getY(i);
-        let z = pos.getZ(i);
-        x *= scaleX;
-        y *= scaleY;
-        if (y > 0) y *= dorsalPeak; // Muscular spine ridge at the top
-        pos.setXYZ(i, x, y, z);
-      }
-      geo.computeVertexNormals();
-      return geo;
-    };
-
-    // Root node for crouching / body shifts
-    this.bodyRoot = new THREE.Group();
-    group.add(this.bodyRoot);
-
-    // --- 1. Athletic Sculpted Feline Torso (Deep chest, narrow waist, muscular haunches) ---
-    // Deep feline chest with broad shoulder girdle
-    const chestGeo = createOrganicVolume(0.38, 0.42, 1.25, 18, 6, 0.98, 1.12, 1.06);
-    const chest = new THREE.Mesh(chestGeo, bodyMat);
-    chest.position.set(0, 1.25, 0.35);
-    chest.castShadow = true;
-    this.chest = chest;
-    this.bodyRoot.add(chest);
-
-    // Dynamic Muscular Scapulae (Shoulder blades that roll realistically with strides)
-    const scapulaGeo = createOrganicVolume(0.18, 0.22, 0.52, 12, 4, 0.72, 1.28, 1.15);
-    const leftScapula = new THREE.Mesh(scapulaGeo, bodyMat);
-    leftScapula.position.set(0.30, 0.22, 0.12);
-    leftScapula.rotation.set(-0.15, 0, 0.16);
-    leftScapula.castShadow = true;
-    this.chest.add(leftScapula);
-    this.leftScapula = leftScapula;
-
-    const rightScapula = new THREE.Mesh(scapulaGeo, bodyMat);
-    rightScapula.position.set(-0.30, 0.22, 0.12);
-    rightScapula.rotation.set(-0.15, 0, -0.16);
-    rightScapula.castShadow = true;
-    this.chest.add(rightScapula);
-    this.rightScapula = rightScapula;
-
-    // Flank / Waist (athletic feline tuck-up, narrower than chest)
-    const waistGeo = createOrganicVolume(0.31, 0.35, 0.76, 18, 6, 0.90, 0.96, 1.03);
-    const waist = new THREE.Mesh(waistGeo, bodyMat);
-    waist.position.set(0, 1.22, -0.40);
-    waist.castShadow = true;
-    this.waist = waist;
-    this.bodyRoot.add(waist);
-
-    // Pelvis / Rump (broad muscular big-cat haunches)
-    const hipsGeo = createOrganicVolume(0.36, 0.33, 0.74, 18, 6, 1.06, 1.04, 1.04);
-    const hips = new THREE.Mesh(hipsGeo, bodyMat);
-    hips.position.set(0, 1.26, -0.92);
-    hips.castShadow = true;
-    this.hips = hips;
-    this.bodyRoot.add(hips);
-
-    // Pure snow-white fur underbelly plate
-    const bellyGeo = createOrganicVolume(0.24, 0.28, 1.82, 16, 4, 0.95, 0.45, 1.0);
-    const belly = new THREE.Mesh(bellyGeo, whiteFurMat);
-    belly.position.set(0, 0.88, -0.15);
-    this.bodyRoot.add(belly);
-
-    // --- 2. Muscular Neck & Realistic Predator Head ---
-    this.neck = new THREE.Group();
-    this.neck.position.set(0, 1.42, 0.85);
-    this.bodyRoot.add(this.neck);
-
-    // Muscular feline cervical column arching forward
-    const neckGeo = createOrganicVolume(0.28, 0.36, 0.78, 16, 6, 0.94, 1.12, 1.08);
-    const neckMesh = new THREE.Mesh(neckGeo, bodyMat);
-    neckMesh.position.set(0, 0.18, 0.25);
-    neckMesh.rotation.x = 0.32;
-    neckMesh.castShadow = true;
-    this.neck.add(neckMesh);
-
-    this.head = new THREE.Group();
-    this.head.position.set(0, 0.42, 0.65);
-    this.neck.add(this.head);
-
-    // Authentic Sculpted Feline Skull (domed forehead for alpine nasal chambers, flared cheekbones)
-    const skullGeo = new THREE.SphereGeometry(0.32, 16, 14);
-    skullGeo.scale(0.96, 0.82, 1.16);
-    const sPos = skullGeo.attributes.position;
-    for (let i = 0; i < sPos.count; i++) {
-      let x = sPos.getX(i);
-      let y = sPos.getY(i);
-      let z = sPos.getZ(i);
-      // Domed forehead (vaulted skull between eyes and crown to warm thin cold air)
-      if (y > 0.08 && z > -0.05 && z < 0.22) {
-        y *= 1.12;
-      }
-      // Zygomatic arches (cheekbones flare outwards below the eyes)
-      if (z > -0.05 && z < 0.18 && y > -0.12 && y < 0.08) {
-        x *= 1.24;
-      }
-      // Sloping brow ridge toward snout bridge
-      if (z > 0.12 && y > 0) y -= (z - 0.12) * 0.32;
-      sPos.setXYZ(i, x, y, z);
-    }
-    skullGeo.computeVertexNormals();
-
-    const skull = new THREE.Mesh(skullGeo, bodyMat);
-    skull.castShadow = true;
-    this.head.add(skull);
-
-    // Wide, sloping nasal bridge (iconic snow leopard wide bridge)
-    const bridgeGeo = createOrganicVolume(0.14, 0.18, 0.40, 12, 4, 1.15, 0.85, 1.0);
-    const bridge = new THREE.Mesh(bridgeGeo, bodyMat);
-    bridge.position.set(0, 0.03, 0.32);
-    bridge.rotation.x = -0.18;
-    this.head.add(bridge);
-
-    // Broad, rounded feline whisker pads / muzzle (white fur)
-    const muzzleGeo = new THREE.CylinderGeometry(0.17, 0.22, 0.32, 14, 4);
-    muzzleGeo.rotateX(Math.PI / 2);
-    muzzleGeo.scale(1.22, 0.78, 1.0);
-    muzzleGeo.computeVertexNormals();
-    const muzzle = new THREE.Mesh(muzzleGeo, whiteFurMat);
-    muzzle.position.set(0, -0.10, 0.44);
-    this.head.add(muzzle);
-
-    // Slate leather nose pad with nostrils
-    const noseGeo = new THREE.ConeGeometry(0.08, 0.10, 8);
-    noseGeo.rotateX(-Math.PI / 2);
-    noseGeo.scale(1.2, 0.8, 0.8);
-    const nose = new THREE.Mesh(noseGeo, noseMat);
-    nose.position.set(0, -0.04, 0.60);
-    this.head.add(nose);
-
-    // Sculpted feline chin / lower jaw tucked underneath with dark lip line
-    const chinGeo = createOrganicVolume(0.10, 0.14, 0.28, 12, 4, 0.92, 0.65, 1.0);
-    const chin = new THREE.Mesh(chinGeo, whiteFurMat);
-    chin.position.set(0, -0.20, 0.38);
-    this.head.add(chin);
-
-    // Forward-facing predatory almond eyes (pale icy glacial green)
-    for (let side = -1; side <= 1; side += 2) {
-      // Dark eyeliner eye socket rim
-      const socketGeo = new THREE.SphereGeometry(0.08, 10, 8);
-      socketGeo.scale(1.15, 0.85, 0.7);
-      const eyeSocket = new THREE.Mesh(socketGeo, darkMat);
-      eyeSocket.position.set(side * 0.17, 0.08, 0.26);
-      this.head.add(eyeSocket);
-
-      // Pale icy glacial green iris
-      const irisGeo = new THREE.SphereGeometry(0.065, 12, 10);
-      irisGeo.scale(1.0, 0.9, 0.6);
-      const eye = new THREE.Mesh(irisGeo, eyeMat);
-      eye.position.set(side * 0.17, 0.08, 0.29);
-      this.head.add(eye);
-
-      // Dark predatory vertical slit pupil
-      const pupilGeo = new THREE.BoxGeometry(0.022, 0.085, 0.03);
-      const pupil = new THREE.Mesh(pupilGeo, darkMat);
-      pupil.position.set(side * 0.17, 0.08, 0.32);
-      this.head.add(pupil);
-
-      // Bright specular glint catchlight
-      const glintGeo = new THREE.SphereGeometry(0.015, 6, 6);
-      const glint = new THREE.Mesh(glintGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
-      glint.position.set(side * 0.18, 0.10, 0.33);
-      this.head.add(glint);
+    if (prevAction) {
+      prevAction.fadeOut(crossFadeDuration);
     }
 
-    // Small rounded feline ears set wide and low on sides of skull (heat conservation)
-    for (let side = -1; side <= 1; side += 2) {
-      const earShellGeo = new THREE.CylinderGeometry(0.05, 0.13, 0.22, 10, 2);
-      earShellGeo.scale(0.85, 1.0, 0.55);
-      const earShell = new THREE.Mesh(earShellGeo, darkMat);
-      earShell.position.set(side * 0.24, 0.23, -0.06);
-      earShell.rotation.set(-0.25, 0, side * -0.34);
-      this.head.add(earShell);
+    this.currentActionName = name;
+  }
 
-      const earInnerGeo = new THREE.CylinderGeometry(0.035, 0.10, 0.18, 8, 2);
-      earInnerGeo.scale(0.85, 1.0, 0.45);
-      const earInner = new THREE.Mesh(earInnerGeo, whiteFurMat);
-      earInner.position.set(side * 0.23, 0.23, -0.04);
-      earInner.rotation.set(-0.25, 0, side * -0.34);
-      this.head.add(earInner);
-    }
-
-    // Feline Whiskers (curved white sensory vibrissae radiating outwards)
-    const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.88 });
-    for (let w = -1; w <= 1; w++) {
-      for (let side = -1; side <= 1; side += 2) {
-        const whisker = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.42, 4), whiskerMat);
-        whisker.rotation.z = side * (Math.PI / 2 + w * 0.18);
-        whisker.rotation.x = -0.15;
-        whisker.position.set(side * 0.26, -0.10 + w * 0.035, 0.46);
-        this.head.add(whisker);
-      }
-    }
-
-    // --- 3. The Iconic Long, Thick Snow Leopard Tail (7 articulated segments, almost body length) ---
-    this.tailSegments = [];
-    let parentTailNode = this.hips;
-    const numSegments = 7;
-    for (let i = 0; i < numSegments; i++) {
-      const segGroup = new THREE.Group();
-      if (i === 0) {
-        segGroup.position.set(0, 0.04, -0.40);
-      } else {
-        segGroup.position.set(0, -0.11, -0.34);
-      }
-
-      // Authentic massive woolly snow leopard tail girth (swells to 0.30m diameter, heavy woolly profile)
-      const tailRadius = 0.14 + Math.sin((i / numSegments) * Math.PI) * 0.032;
-      const segGeo = new THREE.CylinderGeometry(tailRadius * 0.94, tailRadius * 1.06, 0.38, 12, 2);
-      segGeo.computeVertexNormals();
-      const segMesh = new THREE.Mesh(segGeo, bodyMat);
-      segMesh.rotation.x = Math.PI / 3.2; // Natural downward drape and backward trail
-      segMesh.castShadow = true;
-      segGroup.add(segMesh);
-
-      // Final tip segment: rounded bushy dark brush
-      if (i === numSegments - 1) {
-        const tipGeo = new THREE.SphereGeometry(tailRadius * 0.95, 10, 8);
-        const tipMesh = new THREE.Mesh(tipGeo, darkMat);
-        tipMesh.position.set(0, -0.20, 0.12);
-        segGroup.add(tipMesh);
-      }
-
-      parentTailNode.add(segGroup);
-      this.tailSegments.push(segGroup);
-      parentTailNode = segGroup;
-    }
-
-    // --- 4. 3D Luminous Claw Slash Arc Effect ---
+  createClawSlashEffect() {
     const slashGeo = new THREE.RingGeometry(0.9, 1.5, 16, 1, 0, Math.PI * 0.75);
     slashGeo.rotateX(-Math.PI / 2);
     const slashMat = new THREE.MeshBasicMaterial({
@@ -480,91 +200,20 @@ export class SnowLeopard {
       blending: THREE.AdditiveBlending
     });
     this.slashMesh = new THREE.Mesh(slashGeo, slashMat);
-    this.slashMesh.position.set(0.1, 1.15, 1.2);
+    this.slashMesh.position.set(0.1, 0.85, 1.1);
     this.slashMesh.rotation.y = -0.3;
-    this.bodyRoot.add(this.slashMesh);
-
-    // --- 5. Four Articulated Feline Legs (Authentic Snow Leopard limb proportions & extra-large snowshoe paws) ---
-    // Note: Forelimbs are stockier and shorter (for stability on cliffs), hind limbs longer (for 30-50ft leaping)
-    this.legs = {
-      frontLeft: this.createLeg(0.36, 1.15, 0.62, bodyMat, whiteFurMat, darkMat, false),
-      frontRight: this.createLeg(-0.36, 1.15, 0.62, bodyMat, whiteFurMat, darkMat, false),
-      backLeft: this.createLeg(0.33, 1.18, -0.85, bodyMat, whiteFurMat, darkMat, true),
-      backRight: this.createLeg(-0.33, 1.18, -0.85, bodyMat, whiteFurMat, darkMat, true)
-    };
-
-    Object.values(this.legs).forEach((leg) => this.bodyRoot.add(leg.root));
-
-    return group;
-  }
-
-  createLeg(x, y, z, mat, pawMat, clawMat, isBack = false) {
-    const root = new THREE.Group();
-    root.position.set(x, y, z);
-
-    // Upper thigh / shoulder (tapered big-cat musculature)
-    const upperLen = isBack ? 0.66 : 0.50; // Longer hind limbs for explosive leaps
-    const upperGeo = new THREE.CylinderGeometry(isBack ? 0.21 : 0.16, isBack ? 0.14 : 0.11, upperLen, 12, 3);
-    upperGeo.scale(isBack ? 0.88 : 0.95, 1.0, isBack ? 1.30 : 1.05); // Anterior/posterior quadriceps bulge
-    upperGeo.computeVertexNormals();
-    const upper = new THREE.Mesh(upperGeo, mat);
-    upper.position.y = -upperLen * 0.45;
-    upper.castShadow = true;
-    root.add(upper);
-
-    // Knee / Hock joint
-    const lowerJoint = new THREE.Group();
-    lowerJoint.position.set(0, -upperLen * 0.85, isBack ? -0.12 : 0.05);
-    root.add(lowerJoint);
-
-    // Forearm / Gaskin (lower leg)
-    const lowerLen = isBack ? 0.55 : 0.46;
-    const lowerGeo = new THREE.CylinderGeometry(isBack ? 0.12 : 0.11, 0.09, lowerLen, 10, 3);
-    lowerGeo.computeVertexNormals();
-    const lower = new THREE.Mesh(lowerGeo, mat);
-    lower.position.y = -lowerLen * 0.45;
-    lower.castShadow = true;
-    lowerJoint.add(lower);
-
-    // Extra-Large "Snowshoe" Paw (naturally distributes weight across deep snow)
-    const pawGeo = new THREE.CylinderGeometry(0.16, 0.18, 0.11, 14, 2);
-    pawGeo.scale(1.18, 1.0, 1.38); // Broad snowshoe oval resting flat on snow
-    pawGeo.computeVertexNormals();
-    const paw = new THREE.Mesh(pawGeo, pawMat);
-    paw.position.set(0, -lowerLen * 0.88, 0.10);
-    paw.castShadow = true;
-    lowerJoint.add(paw);
-
-    // 4 Rounded cushioned toe lobes (digitigrade feline pad structure)
-    const toeOffsets = [-0.10, -0.035, 0.035, 0.10];
-    for (let i = 0; i < 4; i++) {
-      const tx = toeOffsets[i];
-      const toeGeo = new THREE.SphereGeometry(0.045, 8, 6);
-      toeGeo.scale(0.85, 0.72, 1.15);
-      const toe = new THREE.Mesh(toeGeo, pawMat);
-      toe.position.set(tx, -lowerLen * 0.89, 0.25);
-      lowerJoint.add(toe);
-
-      // Dark retractile claws
-      const clawGeo = new THREE.ConeGeometry(0.016, 0.065, 4);
-      clawGeo.rotateX(Math.PI / 2.2);
-      const claw = new THREE.Mesh(clawGeo, clawMat);
-      claw.position.set(tx, -lowerLen * 0.90, 0.30);
-      lowerJoint.add(claw);
-    }
-
-    return { root, lowerJoint };
+    this.mesh.add(this.slashMesh);
   }
 
   createSnowPuffSystem() {
-    const puffCount = 40;
+    const puffCount = 50;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(puffCount * 3);
     const scales = new Float32Array(puffCount);
 
     for (let i = 0; i < puffCount; i++) {
       pos[i * 3] = 0;
-      pos[i * 3 + 1] = -50; // Hidden initially
+      pos[i * 3 + 1] = -50;
       pos[i * 3 + 2] = 0;
       scales[i] = 0;
     }
@@ -572,9 +221,9 @@ export class SnowLeopard {
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const mat = new THREE.PointsMaterial({
       color: 0xffffff,
-      size: 0.8,
+      size: 0.85,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.65,
       depthWrite: false
     });
 
@@ -613,7 +262,7 @@ export class SnowLeopard {
 
   // Locomotion & Actions
   pounce() {
-    if (this.isPouncing || this.pounceCooldown > 0 || this.stamina < 20) return false;
+    if (this.isPouncing || this.pounceCooldown > 0 || this.stamina < 20 || this.isDowned) return false;
 
     this.isPouncing = true;
     this.pounceTimer = this.pounceDuration;
@@ -621,8 +270,13 @@ export class SnowLeopard {
     this.stamina = Math.max(0, this.stamina - 25);
 
     // Burst snow spray ring at leap takeoff
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       this.emitSnowPuff(this.position);
+    }
+
+    // Trigger authentic pounce hunting leap animation
+    if (this.actions['Pounce']) {
+      this.playAction('Pounce', 0.1);
     }
 
     sounds.playPounce();
@@ -630,7 +284,7 @@ export class SnowLeopard {
   }
 
   pawSwipe() {
-    if (this.isSwiping || this.swipeCooldown > 0 || this.stamina < 5) return false;
+    if (this.isSwiping || this.swipeCooldown > 0 || this.stamina < 5 || this.isDowned) return false;
 
     this.isSwiping = true;
     this.swipeTimer = this.swipeDuration;
@@ -643,14 +297,18 @@ export class SnowLeopard {
       this.slashMesh.scale.set(0.65, 0.65, 0.65);
     }
 
+    // Trigger ferocious right paw swipe attack animation
+    if (this.actions['Attack_Right']) {
+      this.playAction('Attack_Right', 0.08);
+    }
+
     sounds.playSwipe();
     return true;
   }
 
   eat(prey) {
-    if (!prey || !prey.isDead || prey.meatAmount <= 0) return false;
+    if (!prey || !prey.isDead || prey.meatAmount <= 0 || this.isDowned) return false;
 
-    // Consume meat chunk
     const consumed = Math.min(prey.meatAmount, 30);
     prey.meatAmount -= consumed;
     this.hunger = Math.min(this.maxHunger, this.hunger + consumed * 1.2);
@@ -658,13 +316,17 @@ export class SnowLeopard {
     this.meatConsumed += Math.round(consumed);
     this.addXp(35);
 
+    // Play predatory feeding bite animation
+    if (this.actions['Bite']) {
+      this.playAction('Bite', 0.15);
+    }
+
     sounds.playEat();
     return true;
   }
 
   addXp(amount) {
     this.xp += amount;
-    // A big reward (e.g. the boss) can be worth several levels at once
     while (this.xp >= this.xpToNext) {
       this.levelUp();
     }
@@ -686,28 +348,38 @@ export class SnowLeopard {
     if (this.isDowned) return;
     this.hp = Math.max(0, this.hp - amount);
     sounds.playAttackHit();
+
     if (this.hp <= 0) {
       this.isDowned = true;
       sounds.playPreyAlert();
+
+      if (this.actions['Death']) {
+        this.playAction('Death', 0.2);
+      }
+
       if (this.onDeath) this.onDeath();
       else this.respawnAtCamp();
     }
   }
 
-  // Survival respawn at mountain camp with half health
   respawnAtCamp() {
     this.isDowned = false;
     this.hp = Math.round(this.maxHp * 0.5);
     this.hunger = Math.max(30, this.hunger);
     this.position.set(0, this.terrain.getTerrainHeight(0, 0), 0);
+    if (this.actions['Idle_Look']) {
+      this.playAction('Idle_Look', 0.3);
+    }
   }
 
-  // Revive on the spot at full strength (reward for watching an ad)
   reviveHere() {
     this.isDowned = false;
     this.hp = this.maxHp;
     this.stamina = this.maxStamina;
     this.hunger = Math.max(60, this.hunger);
+    if (this.actions['Idle_Look']) {
+      this.playAction('Idle_Look', 0.3);
+    }
   }
 
   update(delta, inputDir, isSprintInput, isStalkInput) {
@@ -730,15 +402,15 @@ export class SnowLeopard {
       this.slashMesh.material.opacity = 0;
     }
 
-    // Hunger drain (scaled by difficulty)
+    // Hunger drain
     this.hunger = Math.max(0, this.hunger - delta * this.hungerRate);
     if (this.hunger <= 0) {
-      this.hp = Math.max(1, this.hp - delta * 2); // Starvation damage
+      this.hp = Math.max(1, this.hp - delta * 2);
     }
 
     // Stamina Regeneration & Sprint Cost
-    this.isStalking = isStalkInput;
-    const isMoving = inputDir.lengthSq() > 0.01;
+    this.isStalking = isStalkInput && !this.isDowned;
+    const isMoving = inputDir.lengthSq() > 0.01 && !this.isDowned;
 
     if (this.isPouncing) {
       this.pounceTimer -= delta;
@@ -747,14 +419,13 @@ export class SnowLeopard {
       }
     }
 
-    if (isSprintInput && isMoving && this.stamina > 5 && !this.isStalking) {
+    if (isSprintInput && isMoving && this.stamina > 5 && !this.isStalking && !this.isDowned) {
       this.isSprinting = true;
       this.stamina = Math.max(0, this.stamina - delta * 22);
       if (this.stamina <= 0) this.isSprinting = false;
     } else {
       this.isSprinting = false;
-      // Stamina regens when not sprinting or pouncing
-      if (!this.isPouncing) {
+      if (!this.isPouncing && !this.isDowned) {
         const regenRate = isMoving ? (this.isStalking ? 18 : 12) : 26;
         this.stamina = Math.min(this.maxStamina, this.stamina + delta * regenRate);
       }
@@ -762,7 +433,9 @@ export class SnowLeopard {
 
     // Determine target speed
     let targetSpeed = 0;
-    if (this.isPouncing) {
+    if (this.isDowned) {
+      targetSpeed = 0;
+    } else if (this.isPouncing) {
       targetSpeed = 22.0;
     } else if (isMoving) {
       if (this.isStalking) targetSpeed = this.stalkSpeed;
@@ -770,13 +443,11 @@ export class SnowLeopard {
       else targetSpeed = this.walkSpeed;
     }
 
-    // Smooth speed acceleration
     this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, targetSpeed, delta * 8);
 
     // Apply Movement & Rotation
     if (isMoving || this.isPouncing) {
       if (isMoving && !this.isPouncing) {
-        // Rotate towards input direction
         const targetAngle = Math.atan2(inputDir.x, inputDir.z);
         const diff = shortestAngleDiff(this.facingAngle, targetAngle);
         this.facingAngle = shortestAngleDiff(0, this.facingAngle + diff * Math.min(1, delta * 12));
@@ -788,28 +459,25 @@ export class SnowLeopard {
       this.position.x += Math.sin(this.facingAngle) * this.currentSpeed * delta;
       this.position.z += Math.cos(this.facingAngle) * this.currentSpeed * delta;
 
-      // Audio footstep
       sounds.playFootstep(this.isSprinting, this.isStalking);
 
-      // Emit snow puffs when running or pouncing
       if (this.isSprinting || this.isPouncing) {
         this.emitSnowPuff(this.position);
       }
     }
 
-    // Solid collision with rocks and trees (smooth sliding along obstacle surfaces)
+    // Solid collision with mountain obstacles
     this.terrain.resolveCollision(this.position, 0.85);
 
-    // Keep within mountain arena boundary walls
+    // Arena boundary clamp
     const maxBound = this.terrain.halfSize - 15;
     this.position.x = THREE.MathUtils.clamp(this.position.x, -maxBound, maxBound);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -maxBound, maxBound);
 
-    // Ground Clamping & Slope Alignment
+    // Ground Clamping & Ballistic Pounce Arc
     const groundY = this.terrain.getTerrainHeight(this.position.x, this.position.z);
     let targetY = groundY;
 
-    // Pounce ballistic arc
     if (this.isPouncing) {
       const pounceProgress = 1 - (this.pounceTimer / this.pounceDuration);
       const jumpArc = Math.sin(pounceProgress * Math.PI) * 2.8;
@@ -820,246 +488,53 @@ export class SnowLeopard {
     this.mesh.position.copy(this.position);
     this.mesh.rotation.y = this.facingAngle;
 
-    // Orient mesh gently along terrain slope
+    // Orient gently along mountain slope terrain
     const norm = this.terrain.getTerrainNormal(this.position.x, this.position.z, _terrainNormal);
     this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, (norm.z * 0.4), delta * 8);
     this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, (-norm.x * 0.4), delta * 8);
 
-    // --- Animations & Skeleton Poses ---
-    this.updateAnimation(delta, isMoving);
+    // Update Skeletal Animations
+    this.updateAnimationState(delta, isMoving);
     this.updateSnowPuffs(delta);
   }
 
-  updateAnimation(delta, isMoving) {
-    // Dynamic animation cadence (gallop bound is rapid, stalk is slow and deliberate)
-    const animRate = this.isSprinting ? 11.5 : (this.isStalking ? 4.2 : 6.8);
-    if (isMoving || this.isPouncing) {
-      this.animTime += delta * animRate;
-    }
+  updateAnimationState(delta, isMoving) {
+    if (!this.mixer) return;
 
-    // Predatory Stalk Crouch interpolation
-    const targetCrouch = this.isStalking ? 1 : 0;
-    this.crouchLerp = THREE.MathUtils.lerp(this.crouchLerp, targetCrouch, delta * 6);
+    // Advance skeletal animation mixer
+    this.mixer.update(delta);
 
-    // Body sinks low to the snow in stalking mode (chest drops, neck extends flat and low)
-    this.bodyRoot.position.y = -this.crouchLerp * 0.48;
-    this.chest.rotation.x = this.crouchLerp * 0.12;
-    this.neck.position.y = 1.42 - this.crouchLerp * 0.58;
-    this.neck.rotation.x = 0.32 - this.crouchLerp * 0.20; // Neck extends horizontally forward
-    this.head.rotation.x = this.crouchLerp * 0.18; // Head raises slightly so eyes peer straight ahead
-
-    // ==========================================
-    // 1. POUNCE LEAP ATTACK POSE & AIR STABILIZER
-    // ==========================================
-    if (this.isPouncing) {
-      const pProgress = 1 - (this.pounceTimer / this.pounceDuration);
-      const arc = Math.sin(pProgress * Math.PI);
-
-      // Forelimbs reach forward with wide snowshoe paws and claws ready to strike
-      this.legs.frontLeft.root.rotation.x = -1.20 + arc * 0.35;
-      this.legs.frontRight.root.rotation.x = -1.20 + arc * 0.35;
-      this.legs.frontLeft.lowerJoint.rotation.x = 0.35;
-      this.legs.frontRight.lowerJoint.rotation.x = 0.35;
-
-      // Hind legs push back straight in explosive leap extension
-      this.legs.backLeft.root.rotation.x = 1.15;
-      this.legs.backRight.root.rotation.x = 1.15;
-      this.legs.backLeft.lowerJoint.rotation.x = 0.18;
-      this.legs.backRight.lowerJoint.rotation.x = 0.18;
-
-      // Tail arches high upward as an aerodynamic pitch stabilizer
-      this.tailSegments.forEach((seg, idx) => {
-        seg.rotation.x = -0.32 + idx * 0.04;
-        seg.rotation.y = 0;
-      });
-
-      this.head.rotation.x = 0.15;
-      return;
-    }
-
-    // Ease head back to neutral after a pounce
-    this.head.rotation.x = THREE.MathUtils.lerp(this.head.rotation.x, 0, delta * 8);
-
-    // ==========================================
-    // 2. SPRINT: ROTARY BOUNDING GALLOP
-    // ==========================================
-    if (this.isSprinting && isMoving) {
-      const gTime = this.animTime;
-      const gSin = Math.sin(gTime);
-      const gCos = Math.cos(gTime);
-
-      // Spine & Pelvis dynamics: flexion (arch) during gathering, extension during leap
-      // When gSin > 0: Extension phase (hind legs push, spine lengthens, chest drops slightly)
-      // When gSin <= 0: Contraction phase (spine arches up, hips tilt forward, hind legs tuck)
-      this.chest.position.y = 1.25 - gSin * 0.10;
-      this.hips.position.y = 1.28 + Math.abs(gSin) * 0.18;
-      this.hips.rotation.x = -gSin * 0.22; // Pelvic pitch stroke
-
-      // Hind Limbs: explosive propulsion followed by deep forward tuck under the belly
-      const hindPropulsion = Math.max(-0.6, gSin * 0.95);
-      this.legs.backLeft.root.rotation.x = hindPropulsion;
-      this.legs.backRight.root.rotation.x = hindPropulsion - 0.15; // Natural lead-leg offset
-      // Hock joints flex deeply during tuck, extend during push
-      this.legs.backLeft.lowerJoint.rotation.x = gSin < 0 ? Math.abs(gSin) * 0.85 : 0.15;
-      this.legs.backRight.lowerJoint.rotation.x = gSin < 0 ? Math.abs(gSin) * 0.85 : 0.15;
-
-      // Forelimbs: reach far forward to catch ground, then push backward
-      const frontReach = -hindPropulsion * 0.90;
-      this.legs.frontLeft.root.rotation.x = frontReach;
-      this.legs.frontRight.root.rotation.x = frontReach + 0.15;
-      this.legs.frontLeft.lowerJoint.rotation.x = gSin > 0 ? 0.35 : 0.10;
-      this.legs.frontRight.lowerJoint.rotation.x = gSin > 0 ? 0.35 : 0.10;
-
-      // Scapula pumping with gallop strides
-      if (this.leftScapula && this.rightScapula) {
-        this.leftScapula.position.y = 0.22 + gSin * 0.08;
-        this.rightScapula.position.y = 0.22 - gSin * 0.08;
-      }
-
-      // Active Dynamic Tail Counterbalance & High-Speed Turn Rudder
-      const rudderTurn = -this.turnVelocity * 0.80; // Centrifugal counter-rudder
-      this.tailSegments.forEach((seg, idx) => {
-        const wave = Math.sin(gTime - idx * 0.52);
-        // Vertical whip dampens pitch oscillation
-        seg.rotation.x = -0.18 + wave * 0.26;
-        // Horizontal whip + counter-rudder in turns
-        seg.rotation.y = rudderTurn * (idx * 0.24) + Math.sin(gTime * 0.5 - idx * 0.38) * 0.10;
-      });
-
-      this.head.rotation.y = THREE.MathUtils.lerp(this.head.rotation.y, 0, delta * 8);
-    }
-    // ==========================================
-    // 3. WALK & STALK: 4-BEAT LATERAL SEQUENCE GAIT
-    // ==========================================
-    else if (isMoving) {
-      const strideAmp = this.isStalking ? 0.38 : 0.58;
-
-      // Natural 4-beat quadruped diagonal footfall sequence:
-      // LH (0.00) -> LF (0.25) -> RH (0.50) -> RF (0.75)
-      const legPhases = {
-        backLeft: 0.00,
-        frontLeft: 0.25,
-        backRight: 0.50,
-        frontRight: 0.75
-      };
-
-      // Real feline foot kinematics:
-      // - Stance Phase (paw on ground): limb rotates backward, supporting body
-      // - Swing Phase (paw in air): knee/wrist flexes upward so paw clears snow, then extends to plant
-      const calcLegMotion = (phaseOffset) => {
-        const cycle = (this.animTime + phaseOffset * Math.PI * 2) % (Math.PI * 2);
-        const sin = Math.sin(cycle);
-        const cos = Math.cos(cycle);
-        // Main limb rotation (push back vs swing forward)
-        const rootRot = sin * strideAmp;
-        // Joint flexion: lifts paw during swing phase (sin < 0)
-        const jointFlex = sin < 0 ? Math.abs(sin) * (strideAmp * 1.35) : Math.max(0, cos * 0.12);
-        return { rootRot, jointFlex };
-      };
-
-      const fl = calcLegMotion(legPhases.frontLeft);
-      const fr = calcLegMotion(legPhases.frontRight);
-      const bl = calcLegMotion(legPhases.backLeft);
-      const br = calcLegMotion(legPhases.backRight);
-
-      this.legs.frontLeft.root.rotation.x = fl.rootRot;
-      this.legs.frontLeft.lowerJoint.rotation.x = fl.jointFlex;
-
-      this.legs.frontRight.root.rotation.x = fr.rootRot;
-      this.legs.frontRight.lowerJoint.rotation.x = fr.jointFlex;
-
-      this.legs.backLeft.root.rotation.x = bl.rootRot;
-      this.legs.backLeft.lowerJoint.rotation.x = bl.jointFlex;
-
-      this.legs.backRight.root.rotation.x = br.rootRot;
-      this.legs.backRight.lowerJoint.rotation.x = br.jointFlex;
-
-      // Scapula / Shoulder Blade Roll (hypnotic big-cat shoulder motion)
-      if (this.leftScapula && this.rightScapula) {
-        const scapRoll = Math.sin(this.animTime + legPhases.frontLeft * Math.PI * 2) * (this.isStalking ? 0.10 : 0.07);
-        this.leftScapula.position.y = 0.22 + scapRoll;
-        this.rightScapula.position.y = 0.22 - scapRoll;
-        this.leftScapula.rotation.x = -0.15 + scapRoll * 1.3;
-        this.rightScapula.rotation.x = -0.15 - scapRoll * 1.3;
-      }
-
-      // Lateral Spine & Pelvic Undulation (subtle S-curve body sway)
-      const spineSway = Math.sin(this.animTime * 0.5) * (this.isStalking ? 0.025 : 0.045);
-      this.chest.rotation.y = spineSway;
-      this.hips.rotation.y = -spineSway * 1.2;
-      this.hips.rotation.x = Math.sin(this.animTime) * 0.04;
-      this.chest.position.y = 1.25 + Math.abs(Math.sin(this.animTime)) * 0.035;
-
-      // Tail Dynamics during Walk vs Stalk
+    // Priority-based animation state selection
+    if (this.isDowned) {
+      this.playAction('Death', 0.2);
+    } else if (this.isPouncing) {
+      this.playAction('Pounce', 0.1);
+    } else if (this.isSwiping) {
+      this.playAction('Attack_Right', 0.08);
+    } else if (isMoving) {
       if (this.isStalking) {
-        // Stalking: tail carried low to ground, trailing quietly with hypnotic tip twitch
-        this.tailSegments.forEach((seg, idx) => {
-          const basePitch = 0.28 + idx * 0.065;
-          const tipTwitch = idx >= 4 ? Math.sin(this.animTime * 1.6) * 0.22 : 0;
-          seg.rotation.x = basePitch;
-          seg.rotation.y = Math.sin(this.animTime * 0.35) * 0.04 + tipTwitch;
-        });
+        this.playAction('ProwlWalk', 0.25);
+        if (this.actions['ProwlWalk']) {
+          this.actions['ProwlWalk'].timeScale = Math.max(0.6, this.currentSpeed / this.stalkSpeed);
+        }
+      } else if (this.isSprinting) {
+        this.playAction('Run', 0.18);
+        if (this.actions['Run']) {
+          this.actions['Run'].timeScale = Math.max(0.7, this.currentSpeed / this.sprintSpeed);
+        }
       } else {
-        // Walking: natural relaxed tail sway in harmony with stride cadence
-        this.tailSegments.forEach((seg, idx) => {
-          const sway = Math.sin(this.animTime * 0.65 - idx * 0.42) * 0.16;
-          seg.rotation.y = sway;
-          seg.rotation.x = 0.14 + Math.sin(this.animTime * 0.65 - idx * 0.32) * 0.07;
-        });
+        this.playAction('Walk', 0.2);
+        if (this.actions['Walk']) {
+          this.actions['Walk'].timeScale = Math.max(0.6, this.currentSpeed / this.walkSpeed);
+        }
       }
-
-      this.head.rotation.y = THREE.MathUtils.lerp(this.head.rotation.y, 0, delta * 8);
-    }
-    // ==========================================
-    // 4. IDLE: GENTLE BREATHING & AWARE POSTURE
-    // ==========================================
-    else {
-      const breathSin = Math.sin(this.animTime * 0.7);
-      this.chest.position.y = 1.25 + breathSin * 0.02;
-      this.chest.scale.set(1.0 + breathSin * 0.012, 1.0 + breathSin * 0.012, 1.0);
-      this.hips.position.y = THREE.MathUtils.lerp(this.hips.position.y, 1.26, delta * 6);
-      this.hips.rotation.x = THREE.MathUtils.lerp(this.hips.rotation.x, 0, delta * 6);
-      this.chest.rotation.y = THREE.MathUtils.lerp(this.chest.rotation.y, 0, delta * 6);
-      this.hips.rotation.y = THREE.MathUtils.lerp(this.hips.rotation.y, 0, delta * 6);
-
-      // Subtle predatory head awareness scan
-      this.head.rotation.y = Math.sin(this.animTime * 0.25) * 0.06;
-      this.head.rotation.x = Math.sin(this.animTime * 0.35) * 0.025;
-
-      // Scapulae rest at neutral withers position
-      if (this.leftScapula && this.rightScapula) {
-        this.leftScapula.position.y = THREE.MathUtils.lerp(this.leftScapula.position.y, 0.22, delta * 6);
-        this.rightScapula.position.y = THREE.MathUtils.lerp(this.rightScapula.position.y, 0.22, delta * 6);
-      }
-
-      // Tail rests with natural downward drape and gentle tip curl
-      this.tailSegments.forEach((seg, idx) => {
-        seg.rotation.y = Math.sin(this.animTime * 0.4 - idx * 0.35) * 0.06;
-        seg.rotation.x = 0.16 + Math.sin(this.animTime * 0.35 - idx * 0.28) * 0.04;
-      });
-
-      // Smoothly ease limbs to grounded resting stance
-      Object.values(this.legs).forEach((l) => {
-        l.root.rotation.x = THREE.MathUtils.lerp(l.root.rotation.x, 0, delta * 8);
-        l.lowerJoint.rotation.x = THREE.MathUtils.lerp(l.lowerJoint.rotation.x, 0.10, delta * 8);
-      });
-    }
-
-    // ==========================================
-    // 5. PAW SWIPE ATTACK (Fast slashing strike)
-    // ==========================================
-    if (this.isSwiping) {
-      const swipeProgress = 1 - (this.swipeTimer / this.swipeDuration);
-      const slashArc = Math.sin(swipeProgress * Math.PI);
-      this.legs.frontRight.root.rotation.x = -1.25 * slashArc;
-      this.legs.frontRight.root.rotation.z = -0.60 * slashArc;
-      this.legs.frontRight.root.rotation.y = 0.50 * slashArc;
-      this.legs.frontRight.lowerJoint.rotation.x = 0.80 * slashArc;
-      this.head.rotation.y = -0.25 * slashArc;
     } else {
-      const fr = this.legs.frontRight.root.rotation;
-      fr.y = THREE.MathUtils.lerp(fr.y, 0, delta * 10);
-      fr.z = THREE.MathUtils.lerp(fr.z, 0, delta * 10);
+      // Stationary poses
+      if (this.isStalking) {
+        this.playAction('ProwlIdle', 0.3);
+      } else {
+        this.playAction('Idle_Look', 0.35);
+      }
     }
   }
 }
