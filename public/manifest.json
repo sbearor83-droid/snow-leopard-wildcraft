@@ -1,6 +1,6 @@
 {
-  "name": "Snow Leopard: Mountain Hunter",
-  "short_name": "SnowLeopard",
+  "name": "Snow Leopard World",
+  "short_name": "Snow Leopard",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "landscape",

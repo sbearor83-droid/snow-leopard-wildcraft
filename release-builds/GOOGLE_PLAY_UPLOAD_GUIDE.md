@@ -5,8 +5,8 @@ Attach them to a GitHub Release or upload them straight to the Play Console inst
 
 | File | Purpose |
 | :--- | :--- |
-| **`SnowLeopard-MountainHunter.aab`** | The file to upload to Google Play Console (Android App Bundle). |
-| **`SnowLeopard-MountainHunter.apk`** | Standalone installable APK for sideloading onto a phone. |
+| **`SnowLeopardWorld.aab`** | The file to upload to Google Play Console (Android App Bundle). |
+| **`SnowLeopardWorld.apk`** | Standalone installable APK for sideloading onto a phone. |
 
 ---
 
@@ -44,7 +44,7 @@ Before each new Play upload, bump `versionCode` (and usually `versionName`) in `
 1. **Log in to Google Play Console:** [https://play.google.com/console](https://play.google.com/console).
 2. **Create New App:**
    * Click **Create app**.
-   * App name: `Snow Leopard: Mountain Hunter`
+   * App name: `Snow Leopard World`
    * Default language: `English (United States)`
    * App or game: **Game**
    * Free or paid: **Free** (or your preference).
@@ -52,7 +52,7 @@ Before each new Play upload, bump `versionCode` (and usually `versionName`) in `
    * In the left sidebar under *Release*, go to **Production** (or **Internal testing** / **Closed testing** for your first test run).
    * Click **Create new release**.
    * Drag and drop the `.aab` into the *App bundles* upload box.
-   * Add release notes, e.g. *"Initial release of Snow Leopard: Mountain Hunter! Stalk through snowy mountain peaks, track herds with scent vision, and pounce on prey."*
+   * Add release notes, e.g. *"Initial release of Snow Leopard World! Stalk through snowy mountain peaks, track herds with scent vision, and pounce on prey."*
    * Click **Save** and **Review release**.
 4. **Store Presence & Listing:**
    * Under *Grow > Store presence > Main store listing*:

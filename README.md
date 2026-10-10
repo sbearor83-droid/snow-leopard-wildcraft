@@ -1,4 +1,4 @@
-# Snow Leopard: Mountain Hunter 🐆❄️
+# Snow Leopard World 🐆❄️
 *A Wildcraft-inspired 3D animal simulator and mountain hunting RPG for Android and Web, built with Three.js and Capacitor.*
 
 ---
@@ -57,7 +57,7 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 
 ## 📱 Building for Android
 
-The Capacitor Android project is already set up in `android/` (app ID `com.snowleopard.mountainhunter`).
+The Capacitor Android project is already set up in `android/` (app ID `com.snowleopardworld.game`).
 
 ```bash
 npm run android        # vite build + npx cap sync android

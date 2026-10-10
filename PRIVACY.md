@@ -1,8 +1,8 @@
-# Privacy Policy — Snow Leopard: Mountain Hunter
+# Privacy Policy — Snow Leopard World
 
 _Last updated: October 10, 2026_
 
-Snow Leopard: Mountain Hunter is a single-player offline game.
+Snow Leopard World is a single-player offline game.
 
 **We do not collect, store, or share any personal information.** The game does not:
 
