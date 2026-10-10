@@ -4,4 +4,6 @@
     <string name="title_activity_main">Snow Leopard World</string>
     <string name="package_name">com.snowleopardworld.game</string>
     <string name="custom_url_scheme">com.snowleopardworld.game</string>
+    <!-- AdMob App ID. This is Google's sample ID; replace it with your own (AdMob > Apps > App settings) before release. -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

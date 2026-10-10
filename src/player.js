@@ -23,6 +23,8 @@ export class SnowLeopard {
     this.attackPower = 35;
     this.preyHunted = 0;
     this.meatConsumed = 0;
+    this.isDowned = false; // True from death until the player chooses how to respawn
+    this.onDeath = null; // Set by Game to show the death screen
 
     // Movement & State
     this.position = new THREE.Vector3(0, 0, 0);
@@ -436,15 +438,31 @@ export class SnowLeopard {
   }
 
   takeDamage(amount) {
+    if (this.isDowned) return;
     this.hp = Math.max(0, this.hp - amount);
     sounds.playAttackHit();
     if (this.hp <= 0) {
-      // Survival respawn at mountain camp
-      this.hp = Math.round(this.maxHp * 0.5);
-      this.hunger = Math.max(30, this.hunger);
-      this.position.set(0, this.terrain.getTerrainHeight(0, 0), 0);
+      this.isDowned = true;
       sounds.playPreyAlert();
+      if (this.onDeath) this.onDeath();
+      else this.respawnAtCamp();
     }
+  }
+
+  // Survival respawn at mountain camp with half health
+  respawnAtCamp() {
+    this.isDowned = false;
+    this.hp = Math.round(this.maxHp * 0.5);
+    this.hunger = Math.max(30, this.hunger);
+    this.position.set(0, this.terrain.getTerrainHeight(0, 0), 0);
+  }
+
+  // Revive on the spot at full strength (reward for watching an ad)
+  reviveHere() {
+    this.isDowned = false;
+    this.hp = this.maxHp;
+    this.stamina = this.maxStamina;
+    this.hunger = Math.max(60, this.hunger);
   }
 
   update(delta, inputDir, isSprintInput, isStalkInput) {

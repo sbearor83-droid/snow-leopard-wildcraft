@@ -33,7 +33,7 @@ export class GameCamera {
     // Desktop Mouse Drag Orbit (any button, outside the HUD)
     window.addEventListener('mousedown', (e) => {
       // Don't intercept UI buttons, the HUD or the virtual joystick
-      if (e.target.closest('#joystick-container, .action-btn, .top-hud')) return;
+      if (e.target.closest('#joystick-container, .action-btn, .top-hud, #death-screen')) return;
       isDragging = true;
       lastX = e.clientX;
       lastY = e.clientY;

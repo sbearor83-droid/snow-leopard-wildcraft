@@ -6,6 +6,7 @@ import { GameCamera } from './camera.js';
 import { InputManager } from './controls.js';
 import { ScentVision } from './scent.js';
 import { sounds } from './audio.js';
+import { ads } from './ads.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -73,6 +74,9 @@ class Game {
     this.lastLevelSeen = 1;
     this.hudCache = new Map(); // element -> { prop: lastValue }, avoids redundant DOM writes
 
+    // Death screen (revive with a rewarded ad, or respawn at camp)
+    this.player.onDeath = () => this.showDeathScreen();
+
     // Boss ramming reaction callback
     this.player.onRammed = (ramDmg) => {
       const screenPos = this.getScreenCoords(this.player.position);
@@ -89,6 +93,11 @@ class Game {
     const unlockAudio = () => sounds.ensureContext();
     window.addEventListener('pointerdown', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
+
+    // Ads (Android app only; no-op in the browser)
+    ads.init().then(() => {
+      if (ads.privacyOptionsRequired && this.btnAdPrivacy) this.btnAdPrivacy.style.display = 'block';
+    });
 
     // Start Game Loop
     this.animate = this.animate.bind(this);
@@ -161,6 +170,17 @@ class Game {
     this.bossBarFill = document.getElementById('boss-bar-fill');
     this.bossHpLabel = document.getElementById('boss-hp-label');
 
+    // Death screen
+    this.deathScreen = document.getElementById('death-screen');
+    this.btnReviveAd = document.getElementById('btn-revive-ad');
+    this.btnRespawn = document.getElementById('btn-respawn');
+    this.btnReviveAd.addEventListener('click', () => this.reviveWithAd());
+    this.btnRespawn.addEventListener('click', () => this.respawnAtCamp());
+
+    // Ad consent options (only shown where privacy law requires it)
+    this.btnAdPrivacy = document.getElementById('btn-ad-privacy');
+    this.btnAdPrivacy.addEventListener('click', () => ads.showPrivacyOptions());
+
     // Difficulty buttons
     document.querySelectorAll('.diff-btn').forEach((btn) => {
       btn.addEventListener('pointerdown', (e) => {
@@ -168,6 +188,58 @@ class Game {
         this.setDifficulty(btn.dataset.diff);
       });
     });
+  }
+
+  showDeathScreen() {
+    this.updateHUD();
+    this.btnReviveAd.style.display = ads.canShowRewarded ? 'block' : 'none';
+    this.setDeathButtonsDisabled(false);
+    this.deathScreen.style.display = 'flex';
+  }
+
+  hideDeathScreen() {
+    this.deathScreen.style.display = 'none';
+    // Drop any actions pressed while the death screen was up
+    this.input.isPounceRequested = false;
+    this.input.isSwipeRequested = false;
+    this.input.isEatRequested = false;
+    this.input.isScentRequested = false;
+  }
+
+  setDeathButtonsDisabled(disabled) {
+    this.btnReviveAd.disabled = disabled;
+    this.btnRespawn.disabled = disabled;
+  }
+
+  async reviveWithAd() {
+    this.setDeathButtonsDisabled(true);
+    sounds.setSuspended(true);
+    const earned = await ads.showRewarded();
+    sounds.setSuspended(false);
+
+    if (!earned) {
+      // Ad was skipped or failed: only the camp option remains
+      this.btnReviveAd.style.display = 'none';
+      this.setDeathButtonsDisabled(false);
+      return;
+    }
+
+    this.player.reviveHere();
+    // Give the leopard a moment before a nearby boss can ram again
+    for (const p of this.preyManager.preyList) {
+      if (p.isBoss) p.chargeCooldown = Math.max(p.chargeCooldown, 3);
+    }
+    this.hideDeathScreen();
+    this.spawnFloatingText('REVIVED! Full Strength', '#22c55e', this.getScreenCoords(this.player.position));
+  }
+
+  async respawnAtCamp() {
+    this.setDeathButtonsDisabled(true);
+    sounds.setSuspended(true);
+    await ads.maybeShowInterstitial();
+    sounds.setSuspended(false);
+    this.player.respawnAtCamp();
+    this.hideDeathScreen();
   }
 
   spawnFloatingText(text, color, screenPos) {
@@ -385,6 +457,12 @@ class Game {
     const delta = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
 
+    // World is frozen while the death screen is up
+    if (this.player.isDowned) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
     // 1. Get input
     const moveVec = this.input.getMovementVector();
 
@@ -427,5 +505,6 @@ class Game {
 
 // Start Game on window load
 window.addEventListener('DOMContentLoaded', () => {
-  new Game();
+  const game = new Game();
+  if (import.meta.env.DEV) window.__game = game; // Handy for debugging in the browser console
 });
