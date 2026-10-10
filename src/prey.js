@@ -346,7 +346,7 @@ export class PreyAnimal {
     tail.rotation.x = 0.3;
     group.add(tail);
 
-    // Thick Sturdy Pillar Legs
+    // Thick Sturdy Pillar Legs with heavy split bovine hooves
     const legPositions = [
       [0.8, 1.8, 1.2],
       [-0.8, 1.8, 1.2],
@@ -357,13 +357,20 @@ export class PreyAnimal {
       const legRoot = new THREE.Group();
       legRoot.position.set(lx, ly, lz);
 
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.6, 0.6), shaggyMat);
+      const legGeo = new THREE.CylinderGeometry(0.30, 0.22, 1.6, 12, 3);
+      legGeo.computeVertexNormals();
+      const leg = new THREE.Mesh(legGeo, shaggyMat);
       leg.position.y = -0.8;
       leg.castShadow = true;
       legRoot.add(leg);
 
-      const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.35, 0.65), darkMat);
+      // Heavy split bovine hoof
+      const hoofGeo = new THREE.CylinderGeometry(0.24, 0.28, 0.35, 10, 2);
+      hoofGeo.scale(1.1, 1.0, 1.25);
+      hoofGeo.computeVertexNormals();
+      const hoof = new THREE.Mesh(hoofGeo, darkMat);
       hoof.position.y = -1.6;
+      hoof.castShadow = true;
       legRoot.add(hoof);
 
       legRoot.name = 'leg';
@@ -381,17 +388,19 @@ export class PreyAnimal {
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x221f1d, roughness: 0.7 });
 
     // Torso (agile sculpted mountain body)
-    const bodyGeo = new THREE.CylinderGeometry(0.48, 0.58, 1.7, 10);
+    const bodyGeo = new THREE.CylinderGeometry(0.48, 0.58, 1.7, 12, 4);
     bodyGeo.rotateX(Math.PI / 2);
     bodyGeo.scale(1.0, 1.08, 1.0);
+    bodyGeo.computeVertexNormals();
     const body = new THREE.Mesh(bodyGeo, coatMat);
     body.position.y = 1.35;
     body.castShadow = true;
     group.add(body);
 
-    const bellyGeo = new THREE.CylinderGeometry(0.42, 0.48, 1.5, 10);
+    const bellyGeo = new THREE.CylinderGeometry(0.42, 0.48, 1.5, 12, 3);
     bellyGeo.rotateX(Math.PI / 2);
     bellyGeo.scale(0.9, 0.55, 1.0);
+    bellyGeo.computeVertexNormals();
     const belly = new THREE.Mesh(bellyGeo, underMat);
     belly.position.set(0, 0.95, 0);
     group.add(belly);
@@ -402,30 +411,33 @@ export class PreyAnimal {
     headNode.position.set(0, 1.65, 0.85);
     group.add(headNode);
 
-    const neckGeo = new THREE.CylinderGeometry(0.32, 0.45, 0.85, 8);
+    const neckGeo = new THREE.CylinderGeometry(0.32, 0.45, 0.85, 10, 3);
     neckGeo.scale(0.85, 1.1, 1.0);
+    neckGeo.computeVertexNormals();
     const neck = new THREE.Mesh(neckGeo, coatMat);
     neck.position.set(0, 0.3, 0.2);
     neck.rotation.x = 0.5;
     neck.castShadow = true;
     headNode.add(neck);
 
-    const headGeo = new THREE.SphereGeometry(0.38, 8, 8);
+    const headGeo = new THREE.SphereGeometry(0.38, 12, 10);
     headGeo.scale(0.85, 0.8, 1.1);
+    headGeo.computeVertexNormals();
     const headMesh = new THREE.Mesh(headGeo, coatMat);
     headMesh.position.set(0, 0.6, 0.45);
     headMesh.castShadow = true;
     headNode.add(headMesh);
 
     // Muzzle
-    const muzzleGeo = new THREE.CylinderGeometry(0.2, 0.28, 0.5, 8);
+    const muzzleGeo = new THREE.CylinderGeometry(0.2, 0.28, 0.5, 10, 2);
     muzzleGeo.rotateX(Math.PI / 2);
+    muzzleGeo.computeVertexNormals();
     const muzzle = new THREE.Mesh(muzzleGeo, underMat);
     muzzle.position.set(0, 0.45, 0.85);
     headNode.add(muzzle);
 
     // Beard
-    const beard = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 4), darkMat);
+    const beard = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 6), darkMat);
     beard.position.set(0, 0.2, 0.75);
     beard.rotation.x = -0.3;
     headNode.add(beard);
@@ -433,10 +445,9 @@ export class PreyAnimal {
     // Majestic Curved Ibex Horns (scimitar ridges)
     for (let side = -1; side <= 1; side += 2) {
       for (let s = 0; s < 4; s++) {
-        const seg = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.12 - s * 0.025, 0.15 - s * 0.025, 0.4, 6),
-          hornMat
-        );
+        const segGeo = new THREE.CylinderGeometry(0.12 - s * 0.025, 0.15 - s * 0.025, 0.4, 8);
+        segGeo.computeVertexNormals();
+        const seg = new THREE.Mesh(segGeo, hornMat);
         seg.position.set(side * (0.2 + s * 0.06), 0.85 + s * 0.25, 0.35 - s * 0.18);
         seg.rotation.x = -0.5 - s * 0.25;
         seg.rotation.z = side * 0.2;
@@ -445,7 +456,7 @@ export class PreyAnimal {
       }
     }
 
-    // Legs
+    // Agile digitigrade mountain caprid legs with cloven hooves
     const legPositions = [
       [0.4, 1.1, 0.6],
       [-0.4, 1.1, 0.6],
@@ -455,13 +466,20 @@ export class PreyAnimal {
     legPositions.forEach(([lx, ly, lz]) => {
       const legRoot = new THREE.Group();
       legRoot.position.set(lx, ly, lz);
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.0, 0.26), coatMat);
+
+      const legGeo = new THREE.CylinderGeometry(0.14, 0.09, 1.0, 10, 3);
+      legGeo.computeVertexNormals();
+      const leg = new THREE.Mesh(legGeo, coatMat);
       leg.position.y = -0.5;
       leg.castShadow = true;
       legRoot.add(leg);
 
-      const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, 0.3), darkMat);
+      const hoofGeo = new THREE.CylinderGeometry(0.10, 0.13, 0.22, 8, 2);
+      hoofGeo.scale(1.15, 1.0, 1.3);
+      hoofGeo.computeVertexNormals();
+      const hoof = new THREE.Mesh(hoofGeo, darkMat);
       hoof.position.y = -1.0;
+      hoof.castShadow = true;
       legRoot.add(hoof);
 
       legRoot.name = 'leg';
@@ -473,14 +491,16 @@ export class PreyAnimal {
 
   buildHareModel() {
     const group = new THREE.Group();
-    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf5f8fc, roughness: 0.9 });
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf5f8fc, roughness: 0.88 });
     const earTipMat = new THREE.MeshStandardMaterial({ color: 0x1f1f22, roughness: 0.8 });
     const pinkMat = new THREE.MeshStandardMaterial({ color: 0xe0969d, roughness: 0.6 });
 
-    // Round plump body
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 8), whiteMat);
+    // Round plump body with smooth normals
+    const bodyGeo = new THREE.SphereGeometry(0.55, 12, 10);
+    bodyGeo.scale(0.8, 0.85, 1.15);
+    bodyGeo.computeVertexNormals();
+    const body = new THREE.Mesh(bodyGeo, whiteMat);
     body.position.y = 0.55;
-    body.scale.set(0.8, 0.85, 1.15);
     body.castShadow = true;
     group.add(body);
 
@@ -490,36 +510,42 @@ export class PreyAnimal {
     headNode.position.set(0, 0.75, 0.45);
     group.add(headNode);
 
-    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), whiteMat);
+    const headGeo = new THREE.SphereGeometry(0.35, 12, 10);
+    headGeo.computeVertexNormals();
+    const headMesh = new THREE.Mesh(headGeo, whiteMat);
     headMesh.castShadow = true;
     headNode.add(headMesh);
 
     // Tall Ears
     for (let side = -1; side <= 1; side += 2) {
-      const ear = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.65, 5), whiteMat);
+      const earGeo = new THREE.CylinderGeometry(0.07, 0.11, 0.65, 8, 2);
+      earGeo.computeVertexNormals();
+      const ear = new THREE.Mesh(earGeo, whiteMat);
       ear.position.set(side * 0.16, 0.45, -0.05);
       ear.rotation.z = side * -0.2;
       ear.castShadow = true;
       headNode.add(ear);
 
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 5), earTipMat);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 6), earTipMat);
       tip.position.set(side * 0.16, 0.72, -0.05);
       tip.rotation.z = side * -0.2;
       headNode.add(tip);
     }
 
     // Fluffy Pompom Tail
-    const tail = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6), whiteMat);
+    const tail = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), whiteMat);
     tail.position.set(0, 0.55, -0.65);
     group.add(tail);
 
-    // Legs
+    // Smooth sculpted hare legs
     for (let i = 0; i < 4; i++) {
       const legRoot = new THREE.Group();
       const isBack = i >= 2;
       legRoot.position.set((i % 2 === 0 ? 1 : -1) * 0.28, 0.45, isBack ? -0.35 : 0.35);
 
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.15, isBack ? 0.55 : 0.4, 0.2), whiteMat);
+      const legGeo = new THREE.CylinderGeometry(0.08, 0.05, isBack ? 0.55 : 0.4, 8, 2);
+      legGeo.computeVertexNormals();
+      const leg = new THREE.Mesh(legGeo, whiteMat);
       leg.position.y = -0.2;
       leg.castShadow = true;
       legRoot.add(leg);

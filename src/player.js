@@ -69,40 +69,40 @@ export class SnowLeopard {
     canvas.height = 1024;
     const ctx = canvas.getContext('2d');
 
-    // Base smoky cream with cold blue-grey alpine tint
+    // Base smoky alpine cream coat with cold blue-grey tint
     ctx.fillStyle = '#dde5eb';
     ctx.fillRect(0, 0, 1024, 1024);
 
-    // Warm ochre-tan dorsal mantle and cold snow-white gradient
+    // Warm ochre-tan dorsal mantle fading into snowy white flanks and underbelly
     const grad = ctx.createLinearGradient(0, 0, 0, 1024);
-    grad.addColorStop(0.0, '#b8c4ce'); // Spine top shade
-    grad.addColorStop(0.2, '#d6dee4');
-    grad.addColorStop(0.5, '#eef3f7'); // Flanks
-    grad.addColorStop(0.85, '#f8fafc'); // White belly/throat
+    grad.addColorStop(0.0, '#b4becc'); // Dorsal spine top shade
+    grad.addColorStop(0.18, '#cec3b4'); // Warm golden-tan mantle wash
+    grad.addColorStop(0.42, '#dfe7ee'); // Pale silver flanks
+    grad.addColorStop(0.75, '#f4f7fa'); // Pure snow-white belly/throat
     grad.addColorStop(1.0, '#ffffff');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 1024, 1024);
 
-    // Microscopic fur grain fibers
-    for (let i = 0; i < 18000; i++) {
+    // Microscopic fur grain fibers (dense winter coat underfur)
+    for (let i = 0; i < 24000; i++) {
       const x = Math.random() * 1024;
       const y = Math.random() * 1024;
-      ctx.fillStyle = Math.random() > 0.45 ? 'rgba(185, 200, 215, 0.28)' : 'rgba(255, 255, 255, 0.45)';
-      ctx.fillRect(x, y, 2.5, 2.5);
+      ctx.fillStyle = Math.random() > 0.42 ? 'rgba(175, 192, 210, 0.24)' : 'rgba(255, 255, 255, 0.45)';
+      ctx.fillRect(x, y, 2.2, 2.2);
     }
 
-    // Authentic Snow Leopard Rosettes (open rings with broken charcoal spots & warm shadowed centers)
-    for (let i = 0; i < 160; i++) {
+    // Authentic Snow Leopard Rosettes (open rings with broken charcoal petal spots & warm shadowed centers)
+    for (let i = 0; i < 180; i++) {
       const rx = Math.random() * 1024;
-      const ry = 60 + Math.random() * 850; // Focused on flanks and back
-      const radius = 12 + Math.random() * 18;
+      const ry = 50 + Math.random() * 820; // Concentrated on back, flanks, and thighs
+      const radius = 13 + Math.random() * 20;
       const numPetals = 4 + Math.floor(Math.random() * 3);
 
       ctx.save();
       ctx.translate(rx, ry);
 
-      // Warm taupe-sepia center inside rosette
-      ctx.fillStyle = 'rgba(165, 148, 136, 0.42)';
+      // Warm taupe-sepia shadowed center inside rosette
+      ctx.fillStyle = 'rgba(168, 149, 134, 0.45)';
       ctx.beginPath();
       ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
       ctx.fill();
@@ -112,7 +112,7 @@ export class SnowLeopard {
         const angle = (p / numPetals) * Math.PI * 2 + (Math.random() - 0.5) * 0.45;
         const px = Math.cos(angle) * radius;
         const py = Math.sin(angle) * radius;
-        ctx.fillStyle = '#22252a';
+        ctx.fillStyle = '#22252b';
         ctx.beginPath();
         ctx.arc(px, py, 4.5 + Math.random() * 3.5, 0, Math.PI * 2);
         ctx.fill();
@@ -120,21 +120,56 @@ export class SnowLeopard {
       ctx.restore();
     }
 
-    // Solid dark spots on lower limbs, face, and ears
-    for (let i = 0; i < 280; i++) {
+    // Solid dark spots on lower limbs, face, ears, and tail rings
+    for (let i = 0; i < 320; i++) {
       const sx = Math.random() * 1024;
       const sy = Math.random() * 1024;
-      ctx.fillStyle = '#1c1f24';
+      ctx.fillStyle = '#1b1d22';
       ctx.beginPath();
-      ctx.arc(sx, sy, 3.5 + Math.random() * 4.0, 0, Math.PI * 2);
+      ctx.arc(sx, sy, 3.5 + Math.random() * 4.2, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Soft charcoal paw pad impressions in texture corner
-    ctx.fillStyle = '#26292e';
-    ctx.beginPath();
-    ctx.ellipse(880, 880, 45, 38, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // Tail ring bands across the bottom quadrant
+    for (let r = 0; r < 5; r++) {
+      ctx.fillStyle = 'rgba(26, 29, 34, 0.72)';
+      ctx.fillRect(0, 920 + r * 20, 1024, 12);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
+  }
+
+  // Generates procedural bump map for alpine fur grain and rosette depth
+  createFurBumpMap() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Fine fur grain embossing
+    for (let i = 0; i < 15000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.16)';
+      ctx.fillRect(x, y, 2, 2);
+    }
+
+    // Embossed rosette rims
+    for (let i = 0; i < 90; i++) {
+      const rx = Math.random() * 512;
+      const ry = 40 + Math.random() * 420;
+      const r = 8 + Math.random() * 12;
+
+      ctx.strokeStyle = 'rgba(40, 40, 40, 0.35)';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.arc(rx, ry, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     const tex = new THREE.CanvasTexture(canvas);
     return tex;
@@ -143,208 +178,260 @@ export class SnowLeopard {
   buildModel() {
     const group = new THREE.Group();
     const furTex = this.createFurTexture();
+    const bumpTex = this.createFurBumpMap();
 
     const bodyMat = new THREE.MeshStandardMaterial({
       map: furTex,
-      roughness: 0.8,
-      metalness: 0.05
+      bumpMap: bumpTex,
+      bumpScale: 0.028,
+      roughness: 0.82,
+      metalness: 0.02
     });
 
     const whiteFurMat = new THREE.MeshStandardMaterial({
-      color: 0xf3f7fa,
-      roughness: 0.85
+      color: 0xf6f9fc,
+      bumpMap: bumpTex,
+      bumpScale: 0.022,
+      roughness: 0.86,
+      metalness: 0.01
     });
 
     const darkMat = new THREE.MeshStandardMaterial({
-      color: 0x1f2329,
-      roughness: 0.6
+      color: 0x181a1f,
+      roughness: 0.55
     });
 
     const eyeMat = new THREE.MeshStandardMaterial({
-      color: 0x8cd982, // Amber-mint feline eyes
-      roughness: 0.1,
-      metalness: 0.3,
-      emissive: 0x224422,
-      emissiveIntensity: 0.2
+      color: 0xd4a038, // Piercing predatory amber feline iris
+      roughness: 0.12,
+      metalness: 0.25
     });
 
     const noseMat = new THREE.MeshStandardMaterial({
-      color: 0xd98a96, // Soft pink/grey nose
-      roughness: 0.5
+      color: 0x3f3939, // Slate dark feline leather nose pad
+      roughness: 0.62
     });
+
+    // Helper: Sculpted organic cylinder lying along the Z-axis with smooth feline contour
+    const createOrganicVolume = (rTop, rBottom, length, radSegs = 16, hSegs = 6, scaleX = 1.0, scaleY = 1.0, dorsalPeak = 1.05) => {
+      const geo = new THREE.CylinderGeometry(rTop, rBottom, length, radSegs, hSegs);
+      geo.rotateX(Math.PI / 2);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        let x = pos.getX(i);
+        let y = pos.getY(i);
+        let z = pos.getZ(i);
+        x *= scaleX;
+        y *= scaleY;
+        if (y > 0) y *= dorsalPeak; // Muscular spine ridge at the top
+        pos.setXYZ(i, x, y, z);
+      }
+      geo.computeVertexNormals();
+      return geo;
+    };
 
     // Root node for crouching / body shifts
     this.bodyRoot = new THREE.Group();
     group.add(this.bodyRoot);
 
-    // --- Torso & Spine (Organic Muscular Feline Contour) ---
-    // Deep athletic ribcage & shoulders
-    const chestGeo = new THREE.CylinderGeometry(0.52, 0.62, 1.55, 12);
-    chestGeo.rotateX(Math.PI / 2);
-    chestGeo.scale(1.08, 1.14, 1.0);
-    this.chest = new THREE.Mesh(chestGeo, bodyMat);
-    this.chest.position.set(0, 1.35, 0.4);
-    this.chest.castShadow = true;
-    this.bodyRoot.add(this.chest);
+    // --- 1. Athletic Sculpted Feline Torso (Deep chest, narrow waist, muscular haunches) ---
+    // Deep feline chest with broad shoulder girdle
+    const chestGeo = createOrganicVolume(0.38, 0.42, 1.25, 18, 6, 0.98, 1.12, 1.06);
+    const chest = new THREE.Mesh(chestGeo, bodyMat);
+    chest.position.set(0, 1.25, 0.35);
+    chest.castShadow = true;
+    this.chest = chest;
+    this.bodyRoot.add(chest);
 
-    // Powerful feline haunches & tapered waist (flank)
-    const hipsGeo = new THREE.CylinderGeometry(0.58, 0.48, 1.35, 12);
-    hipsGeo.rotateX(Math.PI / 2);
-    hipsGeo.scale(1.02, 1.08, 1.0);
-    this.hips = new THREE.Mesh(hipsGeo, bodyMat);
-    this.hips.position.set(0, 1.32, -0.7);
-    this.hips.castShadow = true;
-    this.bodyRoot.add(this.hips);
+    // Flank / Waist (athletic feline tuck-up, narrower than chest)
+    const waistGeo = createOrganicVolume(0.31, 0.35, 0.76, 18, 6, 0.90, 0.96, 1.03);
+    const waist = new THREE.Mesh(waistGeo, bodyMat);
+    waist.position.set(0, 1.22, -0.40);
+    waist.castShadow = true;
+    this.bodyRoot.add(waist);
 
-    // Muscular shoulder blades & haunches
-    for (let side = -1; side <= 1; side += 2) {
-      const shoulderGeo = new THREE.SphereGeometry(0.32, 8, 8);
-      shoulderGeo.scale(0.7, 1.25, 0.95);
-      const shoulder = new THREE.Mesh(shoulderGeo, bodyMat);
-      shoulder.position.set(side * 0.42, 1.48, 0.55);
-      shoulder.castShadow = true;
-      this.bodyRoot.add(shoulder);
+    // Pelvis / Rump (broad muscular big-cat haunches)
+    const hipsGeo = createOrganicVolume(0.36, 0.33, 0.74, 18, 6, 1.06, 1.04, 1.04);
+    const hips = new THREE.Mesh(hipsGeo, bodyMat);
+    hips.position.set(0, 1.25, -0.92);
+    hips.castShadow = true;
+    this.hips = hips;
+    this.bodyRoot.add(hips);
 
-      const flankHaunch = new THREE.Mesh(shoulderGeo, bodyMat);
-      flankHaunch.position.set(side * 0.44, 1.44, -0.75);
-      flankHaunch.castShadow = true;
-      this.bodyRoot.add(flankHaunch);
-    }
-
-    // Soft white fur belly & chest contour
-    const bellyGeo = new THREE.CylinderGeometry(0.38, 0.45, 1.95, 10);
-    bellyGeo.rotateX(Math.PI / 2);
-    bellyGeo.scale(0.9, 0.48, 1.0);
+    // Pure snow-white fur underbelly plate
+    const bellyGeo = createOrganicVolume(0.24, 0.28, 1.82, 16, 4, 0.95, 0.45, 1.0);
     const belly = new THREE.Mesh(bellyGeo, whiteFurMat);
-    belly.position.set(0, 0.88, -0.1);
+    belly.position.set(0, 0.88, -0.15);
     this.bodyRoot.add(belly);
 
-    // --- Neck & Head (Sculpted Predator Skull) ---
+    // --- 2. Muscular Neck & Realistic Predator Head ---
     this.neck = new THREE.Group();
-    this.neck.position.set(0, 1.5, 1.1);
+    this.neck.position.set(0, 1.42, 0.85);
     this.bodyRoot.add(this.neck);
 
-    const neckGeo = new THREE.CylinderGeometry(0.42, 0.52, 0.88, 10);
-    neckGeo.scale(0.88, 1.1, 1.0);
+    // Muscular feline cervical column arching forward
+    const neckGeo = createOrganicVolume(0.28, 0.36, 0.78, 16, 6, 0.94, 1.12, 1.08);
     const neckMesh = new THREE.Mesh(neckGeo, bodyMat);
-    neckMesh.position.set(0, 0.16, 0.28);
-    neckMesh.rotation.x = 0.38;
+    neckMesh.position.set(0, 0.18, 0.25);
+    neckMesh.rotation.x = 0.32;
     neckMesh.castShadow = true;
     this.neck.add(neckMesh);
 
     this.head = new THREE.Group();
-    this.head.position.set(0, 0.48, 0.68);
+    this.head.position.set(0, 0.42, 0.65);
     this.neck.add(this.head);
 
-    // Rounded Feline Skull / Cranium
-    const headGeo = new THREE.SphereGeometry(0.52, 10, 10);
-    headGeo.scale(0.94, 0.84, 1.05);
-    const headMesh = new THREE.Mesh(headGeo, bodyMat);
-    headMesh.castShadow = true;
-    this.head.add(headMesh);
-
-    // Cheekbones / Zygomatic arches (feline whisker puff base)
-    for (let side = -1; side <= 1; side += 2) {
-      const cheekGeo = new THREE.SphereGeometry(0.24, 8, 8);
-      cheekGeo.scale(0.7, 0.75, 1.1);
-      const cheek = new THREE.Mesh(cheekGeo, whiteFurMat);
-      cheek.position.set(side * 0.32, -0.1, 0.38);
-      this.head.add(cheek);
+    // Authentic Sculpted Feline Skull (compact cranium, flattened crown, flared cheekbones)
+    const skullGeo = new THREE.SphereGeometry(0.32, 16, 14);
+    skullGeo.scale(0.96, 0.80, 1.16);
+    const sPos = skullGeo.attributes.position;
+    for (let i = 0; i < sPos.count; i++) {
+      let x = sPos.getX(i);
+      let y = sPos.getY(i);
+      let z = sPos.getZ(i);
+      // Flatten skull roof
+      if (y > 0.12) y *= 0.86;
+      // Zygomatic arches (cheekbones flare outwards below the eyes)
+      if (z > -0.05 && z < 0.18 && y > -0.12 && y < 0.08) {
+        x *= 1.24;
+      }
+      // Sloping brow ridge toward snout bridge
+      if (z > 0.06 && y > 0) y -= (z - 0.06) * 0.30;
+      sPos.setXYZ(i, x, y, z);
     }
+    skullGeo.computeVertexNormals();
 
-    // Tapered Muzzle / Snout
-    const muzzleGeo = new THREE.CylinderGeometry(0.22, 0.32, 0.62, 10);
+    const skull = new THREE.Mesh(skullGeo, bodyMat);
+    skull.castShadow = true;
+    this.head.add(skull);
+
+    // Sloping nasal bridge connecting cranium to muzzle
+    const bridgeGeo = createOrganicVolume(0.12, 0.16, 0.40, 12, 4, 1.05, 0.85, 1.0);
+    const bridge = new THREE.Mesh(bridgeGeo, bodyMat);
+    bridge.position.set(0, 0.02, 0.32);
+    bridge.rotation.x = -0.18;
+    this.head.add(bridge);
+
+    // Broad, rounded feline whisker pads / muzzle (white fur)
+    const muzzleGeo = new THREE.CylinderGeometry(0.16, 0.21, 0.32, 14, 4);
     muzzleGeo.rotateX(Math.PI / 2);
-    muzzleGeo.scale(1.0, 0.82, 1.0);
+    muzzleGeo.scale(1.22, 0.78, 1.0);
+    muzzleGeo.computeVertexNormals();
     const muzzle = new THREE.Mesh(muzzleGeo, whiteFurMat);
-    muzzle.position.set(0, -0.14, 0.56);
+    muzzle.position.set(0, -0.10, 0.44);
     this.head.add(muzzle);
 
-    // Sculpted Nose Pad
-    const noseGeo = new THREE.SphereGeometry(0.12, 6, 6);
-    noseGeo.scale(1.15, 0.7, 0.65);
+    // Slate leather nose pad with nostrils
+    const noseGeo = new THREE.ConeGeometry(0.08, 0.10, 8);
+    noseGeo.rotateX(-Math.PI / 2);
+    noseGeo.scale(1.2, 0.8, 0.8);
     const nose = new THREE.Mesh(noseGeo, noseMat);
-    nose.position.set(0, -0.06, 0.88);
+    nose.position.set(0, -0.04, 0.60);
     this.head.add(nose);
 
-    // Eyes (left & right)
-    const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(0.32, 0.12, 0.42);
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(-0.32, 0.12, 0.42);
-    this.head.add(leftEye, rightEye);
+    // Sculpted feline chin / lower jaw tucked underneath
+    const chinGeo = createOrganicVolume(0.10, 0.14, 0.28, 12, 4, 0.92, 0.65, 1.0);
+    const chin = new THREE.Mesh(chinGeo, whiteFurMat);
+    chin.position.set(0, -0.20, 0.38);
+    this.head.add(chin);
 
-    // Pupils & Specular Eye Highlights
-    const pupilGeo = new THREE.BoxGeometry(0.04, 0.14, 0.05);
-    const leftPupil = new THREE.Mesh(pupilGeo, darkMat);
-    leftPupil.position.set(0.35, 0.12, 0.5);
-    const rightPupil = new THREE.Mesh(pupilGeo, darkMat);
-    rightPupil.position.set(-0.35, 0.12, 0.5);
-    this.head.add(leftPupil, rightPupil);
+    // Forward-facing predatory almond feline eyes
+    for (let side = -1; side <= 1; side += 2) {
+      // Dark eyeliner eye socket rim
+      const socketGeo = new THREE.SphereGeometry(0.08, 10, 8);
+      socketGeo.scale(1.15, 0.85, 0.7);
+      const eyeSocket = new THREE.Mesh(socketGeo, darkMat);
+      eyeSocket.position.set(side * 0.17, 0.07, 0.26);
+      this.head.add(eyeSocket);
 
-    const eyeGlintGeo = new THREE.SphereGeometry(0.025, 4, 4);
-    const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const leftGlint = new THREE.Mesh(eyeGlintGeo, glintMat);
-    leftGlint.position.set(0.37, 0.15, 0.51);
-    const rightGlint = new THREE.Mesh(eyeGlintGeo, glintMat);
-    rightGlint.position.set(-0.33, 0.15, 0.51);
-    this.head.add(leftGlint, rightGlint);
+      // Piercing luminous amber iris
+      const irisGeo = new THREE.SphereGeometry(0.065, 12, 10);
+      irisGeo.scale(1.0, 0.9, 0.6);
+      const eye = new THREE.Mesh(irisGeo, eyeMat);
+      eye.position.set(side * 0.17, 0.07, 0.29);
+      this.head.add(eye);
 
-    // Whiskers (feline sensory vibrissae)
-    const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
-    for (let w = -1; w <= 1; w++) {
-      const leftW = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.42, 3), whiskerMat);
-      leftW.rotation.z = Math.PI / 2 + w * 0.22;
-      leftW.position.set(0.38, -0.16 + w * 0.04, 0.68);
-      this.head.add(leftW);
+      // Dark predatory vertical slit pupil
+      const pupilGeo = new THREE.BoxGeometry(0.022, 0.085, 0.03);
+      const pupil = new THREE.Mesh(pupilGeo, darkMat);
+      pupil.position.set(side * 0.17, 0.07, 0.32);
+      this.head.add(pupil);
 
-      const rightW = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.42, 3), whiskerMat);
-      rightW.rotation.z = -Math.PI / 2 - w * 0.22;
-      rightW.position.set(-0.38, -0.16 + w * 0.04, 0.68);
-      this.head.add(rightW);
+      // Bright specular glint catchlight
+      const glintGeo = new THREE.SphereGeometry(0.015, 6, 6);
+      const glint = new THREE.Mesh(glintGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      glint.position.set(side * 0.18, 0.09, 0.33);
+      this.head.add(glint);
     }
 
-    // Rounded Snow Leopard Ears with White Inner Tuft
-    const earGeo = new THREE.ConeGeometry(0.24, 0.38, 6);
-    const leftEar = new THREE.Mesh(earGeo, bodyMat);
-    leftEar.position.set(0.35, 0.48, -0.1);
-    leftEar.rotation.set(-0.2, 0, -0.3);
-    const rightEar = new THREE.Mesh(earGeo, bodyMat);
-    rightEar.position.set(-0.35, 0.48, -0.1);
-    rightEar.rotation.set(-0.2, 0, 0.3);
-    this.head.add(leftEar, rightEar);
+    // Realistic cup-shaped feline ears (short, rounded for snow habitat, angled naturally)
+    for (let side = -1; side <= 1; side += 2) {
+      const earShellGeo = new THREE.CylinderGeometry(0.06, 0.14, 0.24, 10, 2);
+      earShellGeo.scale(0.85, 1.0, 0.55);
+      const earShell = new THREE.Mesh(earShellGeo, darkMat);
+      earShell.position.set(side * 0.24, 0.25, -0.06);
+      earShell.rotation.set(-0.25, 0, side * -0.32);
+      this.head.add(earShell);
 
-    // --- Iconic Long Thick Snow Leopard Tail ---
-    // Snow leopards have exceptionally thick, bushy tails for mountain balance & warmth
+      const earInnerGeo = new THREE.CylinderGeometry(0.04, 0.11, 0.20, 8, 2);
+      earInnerGeo.scale(0.85, 1.0, 0.45);
+      const earInner = new THREE.Mesh(earInnerGeo, whiteFurMat);
+      earInner.position.set(side * 0.23, 0.25, -0.04);
+      earInner.rotation.set(-0.25, 0, side * -0.32);
+      this.head.add(earInner);
+    }
+
+    // Feline Whiskers (curved white sensory vibrissae radiating outwards)
+    const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.88 });
+    for (let w = -1; w <= 1; w++) {
+      for (let side = -1; side <= 1; side += 2) {
+        const whisker = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.42, 4), whiskerMat);
+        whisker.rotation.z = side * (Math.PI / 2 + w * 0.18);
+        whisker.rotation.x = -0.15;
+        whisker.position.set(side * 0.26, -0.10 + w * 0.035, 0.46);
+        this.head.add(whisker);
+      }
+    }
+
+    // --- 3. Long, Thick Snow Leopard Tail (6 continuous, heavy, beautifully articulated segments) ---
     this.tailSegments = [];
     let parentTailNode = this.hips;
-    const numSegments = 5;
+    const numSegments = 6;
     for (let i = 0; i < numSegments; i++) {
       const segGroup = new THREE.Group();
       if (i === 0) {
-        segGroup.position.set(0, 0.1, -0.75);
+        segGroup.position.set(0, 0.04, -0.42);
       } else {
-        segGroup.position.set(0, -0.1, -0.45);
+        segGroup.position.set(0, -0.11, -0.36);
       }
 
-      // Significantly thicker, rounder and plusher
-      const thickness = 0.35 + Math.sin((i / numSegments) * Math.PI) * 0.12;
-      const segMesh = new THREE.Mesh(new THREE.CylinderGeometry(thickness * 0.88, thickness, 0.52, 8), bodyMat);
-      segMesh.rotation.x = Math.PI / 2.3;
+      // Authentic thick snow leopard tail girth (swells in middle, tapers to bushy tip)
+      const tailRadius = 0.13 + Math.sin((i / numSegments) * Math.PI) * 0.035;
+      const segGeo = new THREE.CylinderGeometry(tailRadius * 0.94, tailRadius * 1.06, 0.42, 12, 2);
+      segGeo.computeVertexNormals();
+      const segMesh = new THREE.Mesh(segGeo, bodyMat);
+      segMesh.rotation.x = Math.PI / 3.0; // Hangs naturally down and curls
       segMesh.castShadow = true;
       segGroup.add(segMesh);
+
+      // Rounded end cap on final tip segment (dark bushy brush)
+      if (i === numSegments - 1) {
+        const tipGeo = new THREE.SphereGeometry(tailRadius * 0.92, 10, 8);
+        const tipMesh = new THREE.Mesh(tipGeo, darkMat);
+        tipMesh.position.set(0, -0.22, 0.12);
+        segGroup.add(tipMesh);
+      }
 
       parentTailNode.add(segGroup);
       this.tailSegments.push(segGroup);
       parentTailNode = segGroup;
     }
 
-    // --- 3D Luminous Claw Slash Arc Effect ---
-    const slashGeo = new THREE.RingGeometry(0.9, 1.6, 16, 1, 0, Math.PI * 0.75);
+    // --- 4. 3D Luminous Claw Slash Arc Effect ---
+    const slashGeo = new THREE.RingGeometry(0.9, 1.5, 16, 1, 0, Math.PI * 0.75);
     slashGeo.rotateX(-Math.PI / 2);
     const slashMat = new THREE.MeshBasicMaterial({
-      color: 0x67e8f9,
+      color: 0x38bdf8,
       transparent: true,
       opacity: 0.0,
       side: THREE.DoubleSide,
@@ -356,12 +443,12 @@ export class SnowLeopard {
     this.slashMesh.rotation.y = -0.3;
     this.bodyRoot.add(this.slashMesh);
 
-    // --- Four Articulated Legs ---
+    // --- 5. Four Articulated Feline Legs (Digitigrade predator anatomy with wide snowshoe paws) ---
     this.legs = {
-      frontLeft: this.createLeg(0.48, 1.15, 0.85, bodyMat, whiteFurMat, darkMat),
-      frontRight: this.createLeg(-0.48, 1.15, 0.85, bodyMat, whiteFurMat, darkMat),
-      backLeft: this.createLeg(0.45, 1.15, -1.1, bodyMat, whiteFurMat, darkMat, true),
-      backRight: this.createLeg(-0.45, 1.15, -1.1, bodyMat, whiteFurMat, darkMat, true)
+      frontLeft: this.createLeg(0.38, 1.15, 0.65, bodyMat, whiteFurMat, darkMat, false),
+      frontRight: this.createLeg(-0.38, 1.15, 0.65, bodyMat, whiteFurMat, darkMat, false),
+      backLeft: this.createLeg(0.34, 1.15, -0.85, bodyMat, whiteFurMat, darkMat, true),
+      backRight: this.createLeg(-0.34, 1.15, -0.85, bodyMat, whiteFurMat, darkMat, true)
     };
 
     Object.values(this.legs).forEach((leg) => this.bodyRoot.add(leg.root));
@@ -373,10 +460,11 @@ export class SnowLeopard {
     const root = new THREE.Group();
     root.position.set(x, y, z);
 
-    // Upper thigh/shoulder (tapered muscular limb)
-    const upperLen = isBack ? 0.68 : 0.62;
-    const upperGeo = new THREE.CylinderGeometry(0.22, 0.32, upperLen, 10);
-    upperGeo.scale(0.85, 1.0, 1.15);
+    // Upper thigh / shoulder (tapered muscular contour)
+    const upperLen = isBack ? 0.62 : 0.55;
+    const upperGeo = new THREE.CylinderGeometry(isBack ? 0.20 : 0.15, isBack ? 0.14 : 0.11, upperLen, 12, 3);
+    upperGeo.scale(isBack ? 0.85 : 0.95, 1.0, isBack ? 1.25 : 1.05); // Muscular anterior/posterior thigh curve
+    upperGeo.computeVertexNormals();
     const upper = new THREE.Mesh(upperGeo, mat);
     upper.position.y = -upperLen * 0.45;
     upper.castShadow = true;
@@ -384,35 +472,40 @@ export class SnowLeopard {
 
     // Knee / Hock joint
     const lowerJoint = new THREE.Group();
-    lowerJoint.position.set(0, -upperLen * 0.85, isBack ? -0.12 : 0.05);
+    lowerJoint.position.set(0, -upperLen * 0.85, isBack ? -0.10 : 0.05);
     root.add(lowerJoint);
 
-    const lowerLen = 0.56;
-    const lowerGeo = new THREE.CylinderGeometry(0.16, 0.22, lowerLen, 10);
+    // Forearm / Gaskin (lower leg)
+    const lowerLen = 0.52;
+    const lowerGeo = new THREE.CylinderGeometry(0.11, 0.085, lowerLen, 10, 3);
+    lowerGeo.computeVertexNormals();
     const lower = new THREE.Mesh(lowerGeo, mat);
     lower.position.y = -lowerLen * 0.45;
     lower.castShadow = true;
     lowerJoint.add(lower);
 
-    // Rounded Snowshoe Paw (wide cushioned paw pad)
-    const pawGeo = new THREE.SphereGeometry(0.24, 8, 8);
-    pawGeo.scale(1.0, 0.55, 1.25);
+    // Wide, flat Snowshoe Paw with rounded contours
+    const pawGeo = new THREE.CylinderGeometry(0.14, 0.16, 0.11, 12, 2);
+    pawGeo.scale(1.15, 1.0, 1.35); // Broad snowshoe oval resting flat on snow
+    pawGeo.computeVertexNormals();
     const paw = new THREE.Mesh(pawGeo, pawMat);
-    paw.position.set(0, -lowerLen * 0.85, 0.14);
+    paw.position.set(0, -lowerLen * 0.88, 0.08);
     paw.castShadow = true;
     lowerJoint.add(paw);
 
-    // 3 Rounded knuckle toes with claws
+    // 3 Rounded cushioned toe arches
     for (let c = -1; c <= 1; c++) {
-      const toeGeo = new THREE.SphereGeometry(0.08, 6, 6);
-      toeGeo.scale(0.8, 0.7, 1.1);
+      const toeGeo = new THREE.SphereGeometry(0.045, 8, 6);
+      toeGeo.scale(0.85, 0.7, 1.15);
       const toe = new THREE.Mesh(toeGeo, pawMat);
-      toe.position.set(c * 0.12, -lowerLen * 0.86, 0.32);
+      toe.position.set(c * 0.08, -lowerLen * 0.89, 0.24);
       lowerJoint.add(toe);
 
-      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.11, 4), clawMat);
-      claw.position.set(c * 0.12, -lowerLen * 0.88, 0.41);
-      claw.rotation.x = Math.PI / 2.3;
+      // Dark retractile claws
+      const clawGeo = new THREE.ConeGeometry(0.018, 0.07, 4);
+      clawGeo.rotateX(Math.PI / 2.2);
+      const claw = new THREE.Mesh(clawGeo, clawMat);
+      claw.position.set(c * 0.08, -lowerLen * 0.90, 0.29);
       lowerJoint.add(claw);
     }
 

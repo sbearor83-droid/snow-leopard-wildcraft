@@ -50,38 +50,25 @@ export class MountainEnvironment {
     return target.set(hL - hR, 2 * delta, hD - hU).normalize();
   }
 
-  // Panoramic Himalayan Sky Dome, Distant Mountain Peaks & Golden Sun Corona
+  // Panoramic Himalayan Sky Dome, Distant Mountain Peaks & Alpine Sun
   createSkyAndDistantMountains() {
-    // 1. Panoramic Alpine Sky Dome with Rayleigh scattering atmospheric gradient
+    // 1. Natural Alpine Sky Dome with Rayleigh atmospheric gradient
     const skyCanvas = document.createElement('canvas');
     skyCanvas.width = 512;
     skyCanvas.height = 512;
     const sCtx = skyCanvas.getContext('2d');
 
     const skyGrad = sCtx.createLinearGradient(0, 0, 0, 512);
-    skyGrad.addColorStop(0.0, '#152e6b'); // Deep Himalayan zenith sapphire
-    skyGrad.addColorStop(0.35, '#2b6cb0'); // High-altitude alpine blue
-    skyGrad.addColorStop(0.62, '#63b3ed'); // Cerulean sky
-    skyGrad.addColorStop(0.80, '#bee3f8'); // Icy horizon wash
-    skyGrad.addColorStop(0.92, '#fde68a'); // Warm golden-peach sunlit horizon
-    skyGrad.addColorStop(1.0, '#cbd5e1'); // Valley atmospheric haze
+    skyGrad.addColorStop(0.0, '#2d547d'); // Natural high-altitude alpine zenith
+    skyGrad.addColorStop(0.40, '#5380aa'); // Soft mountain blue
+    skyGrad.addColorStop(0.72, '#87aed4'); // Glacial pale blue
+    skyGrad.addColorStop(0.92, '#b2cee6'); // Natural horizon atmospheric mist
+    skyGrad.addColorStop(1.0, '#c4dbe8'); // Valley snow haze
     sCtx.fillStyle = skyGrad;
     sCtx.fillRect(0, 0, 512, 512);
 
-    // Wispy cirrus mountain clouds along the lower sky
-    sCtx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-    for (let i = 0; i < 28; i++) {
-      const cx = (i / 28) * 512 + Math.random() * 20;
-      const cy = 340 + Math.sin(i * 1.5) * 35 + Math.random() * 20;
-      const w = 45 + Math.random() * 65;
-      const h = 10 + Math.random() * 14;
-      sCtx.beginPath();
-      sCtx.ellipse(cx, cy, w, h, (Math.random() - 0.5) * 0.2, 0, Math.PI * 2);
-      sCtx.fill();
-    }
-
     const skyTex = new THREE.CanvasTexture(skyCanvas);
-    const skyGeo = new THREE.SphereGeometry(600, 32, 20);
+    const skyGeo = new THREE.SphereGeometry(620, 32, 20);
     const skyMat = new THREE.MeshBasicMaterial({
       map: skyTex,
       side: THREE.BackSide,
@@ -91,17 +78,17 @@ export class MountainEnvironment {
     this.skyDome = new THREE.Mesh(skyGeo, skyMat);
     this.scene.add(this.skyDome);
 
-    // 2. Alpine Sun Corona Billboard (matches directional sun light vector)
+    // 2. Realistic Alpine Sun Disc (crisp bright white with soft atmospheric halo)
     const sunCanvas = document.createElement('canvas');
     sunCanvas.width = 128;
     sunCanvas.height = 128;
     const sunCtx = sunCanvas.getContext('2d');
     const sunGrad = sunCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
     sunGrad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
-    sunGrad.addColorStop(0.18, 'rgba(255, 248, 220, 0.95)');
-    sunGrad.addColorStop(0.42, 'rgba(254, 215, 170, 0.45)');
-    sunGrad.addColorStop(0.75, 'rgba(253, 186, 116, 0.12)');
-    sunGrad.addColorStop(1.0, 'rgba(253, 186, 116, 0.0)');
+    sunGrad.addColorStop(0.2, 'rgba(255, 252, 240, 0.9)');
+    sunGrad.addColorStop(0.5, 'rgba(255, 245, 225, 0.25)');
+    sunGrad.addColorStop(0.8, 'rgba(255, 240, 210, 0.05)');
+    sunGrad.addColorStop(1.0, 'rgba(255, 240, 210, 0.0)');
     sunCtx.fillStyle = sunGrad;
     sunCtx.fillRect(0, 0, 128, 128);
 
@@ -114,23 +101,23 @@ export class MountainEnvironment {
       fog: false
     });
     this.sunSprite = new THREE.Sprite(sunSpriteMat);
-    this.sunSprite.scale.set(160, 160, 160);
+    this.sunSprite.scale.set(130, 130, 130);
     this.sunSprite.position.set(240, 340, 180);
     this.scene.add(this.sunSprite);
 
-    // 3. Panoramic Distant Mountain Ridge Rings (Cinematic Himalayan Skyline)
-    this.createDistantMountainRing(320, 48, 75, 140, 0x90a4ae); // Mid-range crags
-    this.createDistantMountainRing(480, 64, 130, 240, 0xb0c4de); // Towering distant summits
+    // 3. Panoramic Distant Mountain Ranges (Smooth, majestic alpine massifs)
+    this.createDistantMountainRing(300, 54, 80, 145, 0x829bb0); // Mid-range ridges
+    this.createDistantMountainRing(450, 72, 140, 230, 0x9fb6c8); // Towering distant summits
   }
 
-  // Generates 360-degree jagged alpine mountain ranges around the horizon
+  // Generates smooth, majestic alpine mountain ranges around the horizon
   createDistantMountainRing(radius, segments, minHeight, maxHeight, baseColorHex) {
     const geo = new THREE.BufferGeometry();
     const positions = [];
     const colors = [];
 
-    const snowCol = new THREE.Color(0xf5f8fc);
-    const rockCol = new THREE.Color(0x475569);
+    const snowCol = new THREE.Color(0xf2f7fc);
+    const rockCol = new THREE.Color(0x526070);
     const hazeCol = new THREE.Color(baseColorHex);
 
     for (let i = 0; i < segments; i++) {
@@ -138,31 +125,27 @@ export class MountainEnvironment {
       const a1 = ((i + 1) / segments) * Math.PI * 2;
       const aMid = (a0 + a1) * 0.5;
 
-      // Radial jitter creates authentic serrated mountain silhouettes
-      const r0 = radius + (Math.sin(i * 3.7) + Math.cos(i * 1.9)) * 25;
-      const r1 = radius + (Math.sin((i + 1) * 3.7) + Math.cos((i + 1) * 1.9)) * 25;
-      const rPeak = radius * 1.05 + Math.sin(i * 5.3) * 30;
+      const r0 = radius + Math.sin(i * 2.1) * 15;
+      const r1 = radius + Math.sin((i + 1) * 2.1) * 15;
+      const rPeak = radius * 1.04 + Math.cos(i * 3.3) * 18;
 
-      const peakH = minHeight + (Math.sin(i * 2.3) * 0.5 + 0.5) * (maxHeight - minHeight);
-      const saddleH0 = peakH * (0.35 + Math.random() * 0.2);
-      const saddleH1 = peakH * (0.35 + Math.random() * 0.2);
+      const peakH = minHeight + (Math.sin(i * 1.8) * 0.5 + 0.5) * (maxHeight - minHeight);
+      const saddleH0 = peakH * 0.45;
+      const saddleH1 = peakH * 0.45;
 
-      // Triangle 1: Base quad left -> peak
       const x0 = Math.cos(a0) * r0, z0 = Math.sin(a0) * r0;
       const x1 = Math.cos(a1) * r1, z1 = Math.sin(a1) * r1;
       const xp = Math.cos(aMid) * rPeak, zp = Math.sin(aMid) * rPeak;
 
-      // Face 1: Left slope
+      // Natural continuous mountain slope faces
       positions.push(x0, 0, z0,  x0, saddleH0, z0,  xp, peakH, zp);
       colors.push(hazeCol.r, hazeCol.g, hazeCol.b, rockCol.r, rockCol.g, rockCol.b, snowCol.r, snowCol.g, snowCol.b);
 
-      // Face 2: Right slope
       positions.push(xp, peakH, zp,  x1, saddleH1, z1,  x1, 0, z1);
       colors.push(snowCol.r, snowCol.g, snowCol.b, rockCol.r, rockCol.g, rockCol.b, hazeCol.r, hazeCol.g, hazeCol.b);
 
-      // Face 3: Center filler
       positions.push(x0, 0, z0,  xp, peakH, zp,  x1, 0, z1);
-      colors.push(hazeCol.r, hazeCol.g, hazeCol.b, snowCol.r, snowCol.g, snowCol.b, hazeCol.r, hazeCol.g, hazeCol.b);
+      colors.push(hazeCol.r, hazeCol.g, hazeCol.b, rockCol.r, rockCol.g, rockCol.b, hazeCol.r, hazeCol.g, hazeCol.b);
     }
 
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -171,9 +154,9 @@ export class MountainEnvironment {
 
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      roughness: 0.9,
-      metalness: 0.05,
-      flatShading: true
+      roughness: 0.88,
+      metalness: 0.04,
+      flatShading: false
     });
 
     const mesh = new THREE.Mesh(geo, mat);
@@ -376,15 +359,38 @@ export class MountainEnvironment {
   }
 
   createDecorations() {
-    const rockGeo = new THREE.DodecahedronGeometry(1, 1);
+    // 1. Realistic Snow-Dusted Himalayan Granite Boulders
+    const rockGeo = new THREE.DodecahedronGeometry(1, 2);
+    const rPos = rockGeo.attributes.position;
+    const rColors = new Float32Array(rPos.count * 3);
+
+    const snowColor = new THREE.Color(0xf2f7fc);
+    const graniteColor = new THREE.Color(0x566270);
+    const darkRockColor = new THREE.Color(0x38414c);
+
+    for (let i = 0; i < rPos.count; i++) {
+      const y = rPos.getY(i);
+      const col = new THREE.Color();
+      // Natural snow accumulation on top of boulders
+      if (y > 0.32) {
+        col.lerpColors(graniteColor, snowColor, Math.min(1, (y - 0.32) * 2.2));
+      } else {
+        col.lerpColors(darkRockColor, graniteColor, Math.max(0, (y + 1) * 0.7));
+      }
+      rColors[i * 3] = col.r;
+      rColors[i * 3 + 1] = col.g;
+      rColors[i * 3 + 2] = col.b;
+    }
+    rockGeo.setAttribute('color', new THREE.BufferAttribute(rColors, 3));
+    rockGeo.computeVertexNormals();
+
     const rockMat = new THREE.MeshStandardMaterial({
-      color: 0x5a636e,
-      roughness: 0.9,
-      metalness: 0.1,
-      flatShading: true
+      vertexColors: true,
+      roughness: 0.86,
+      metalness: 0.04,
+      flatShading: false
     });
 
-    // 1. Rocky Crags and Boulders (great for stalking and hunting)
     const rockInstanced = new THREE.InstancedMesh(rockGeo, rockMat, 130);
     rockInstanced.castShadow = true;
     rockInstanced.receiveShadow = true;
@@ -418,24 +424,27 @@ export class MountainEnvironment {
 
   createSnowTrees() {
     const numTrees = 65;
-    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 3.8, 6);
+    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 3.8, 8);
     trunkGeo.translate(0, 1.9, 0); // Center pivot at ground base
+    trunkGeo.computeVertexNormals();
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2817, roughness: 0.9 });
 
-    const coneGeo = new THREE.ConeGeometry(2.4, 3.0, 7);
-    coneGeo.translate(0, 1.5, 0);
+    const coneGeo = new THREE.ConeGeometry(2.4, 2.9, 10);
+    coneGeo.translate(0, 1.45, 0);
+    coneGeo.computeVertexNormals();
     const foliageMat = new THREE.MeshStandardMaterial({
-      color: 0x1d3a2b,
-      roughness: 0.75,
-      flatShading: true
+      color: 0x1b3528,
+      roughness: 0.82,
+      flatShading: false
     });
 
-    const snowCapGeo = new THREE.ConeGeometry(2.2, 1.2, 7);
-    snowCapGeo.translate(0, 0.6, 0);
+    const snowCapGeo = new THREE.ConeGeometry(2.35, 1.35, 10);
+    snowCapGeo.translate(0, 0.68, 0);
+    snowCapGeo.computeVertexNormals();
     const snowCapMat = new THREE.MeshStandardMaterial({
-      color: 0xf5f8fc,
-      roughness: 0.7,
-      flatShading: true
+      color: 0xf4f8fc,
+      roughness: 0.75,
+      flatShading: false
     });
 
     const trunkInstanced = new THREE.InstancedMesh(trunkGeo, trunkMat, numTrees);
