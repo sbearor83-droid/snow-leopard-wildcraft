@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1426"/>
+      <stop offset="0.55" stop-color="#16325a"/>
+      <stop offset="1" stop-color="#2b6cb0"/>
+    </linearGradient>
+    <linearGradient id="snow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#bcd7f2"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.5">
+      <stop offset="0" stop-color="#7cc4ff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#7cc4ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+  <!-- far range -->
+  <polygon points="-40,820 170,520 300,660 430,470 600,700 760,500 1064,820" fill="#25466f"/>
+  <polygon points="430,470 392,525 430,512 468,528" fill="#d6e8fa" opacity="0.8"/>
+  <polygon points="760,500 722,552 760,540 800,556" fill="#d6e8fa" opacity="0.8"/>
+  <!-- near range -->
+  <polygon points="-40,1064 -40,860 210,600 420,840 640,620 1064,980 1064,1064" fill="#3b5576"/>
+  <polygon points="210,600 160,668 210,650 262,672" fill="url(#snow)"/>
+  <polygon points="640,620 585,690 640,672 700,700" fill="url(#snow)"/>
+  <!-- snowy ground -->
+  <path d="M-40 1064 L-40 930 Q 300 860 560 930 T 1064 900 L1064 1064 Z" fill="url(#snow)"/>
+  <!-- snowflakes -->
+  <g fill="#ffffff" opacity="0.7">
+    <circle cx="120" cy="150" r="7"/><circle cx="890" cy="120" r="6"/><circle cx="820" cy="300" r="5"/>
+    <circle cx="200" cy="380" r="5"/><circle cx="930" cy="430" r="7"/><circle cx="80" cy="560" r="6"/>
+    <circle cx="300" cy="90" r="4"/><circle cx="700" cy="70" r="5"/>
+  </g>
+</svg>
