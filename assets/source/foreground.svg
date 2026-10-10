@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="fur" cx="0.45" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dbe3ea"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#020617" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="pad">
+      <path d="M512 520 C 610 520 690 600 690 680 C 690 760 620 790 562 776 C 538 770 526 762 512 762 C 498 762 486 770 462 776 C 404 790 334 760 334 680 C 334 600 414 520 512 520 Z"/>
+    </clipPath>
+  </defs>
+  <!-- Paw print kept inside the adaptive-icon safe zone (central ~66%) -->
+  <g filter="url(#shadow)" fill="url(#fur)">
+    <path d="M512 520 C 610 520 690 600 690 680 C 690 760 620 790 562 776 C 538 770 526 762 512 762 C 498 762 486 770 462 776 C 404 790 334 760 334 680 C 334 600 414 520 512 520 Z"/>
+    <ellipse cx="340" cy="470" rx="62" ry="78" transform="rotate(-24 340 470)"/>
+    <ellipse cx="444" cy="380" rx="66" ry="86" transform="rotate(-8 444 380)"/>
+    <ellipse cx="580" cy="380" rx="66" ry="86" transform="rotate(8 580 380)"/>
+    <ellipse cx="684" cy="470" rx="62" ry="78" transform="rotate(24 684 470)"/>
+  </g>
+  <!-- Snow leopard rosettes on the main pad -->
+  <g clip-path="url(#pad)"><g transform="translate(512 660) scale(1.22) translate(-512 -660)">
+    <circle cx="452" cy="640" r="22.5" fill="#c7b8a8" opacity="0.55"/>
+    <ellipse cx="480.7" cy="648.9" rx="10.8" ry="7.2" transform="rotate(107 480.7 648.9)" fill="#2a3038"/>
+    <ellipse cx="452.4" cy="670.0" rx="10.8" ry="7.2" transform="rotate(179 452.4 670.0)" fill="#2a3038"/>
+    <ellipse cx="423.6" cy="649.7" rx="10.8" ry="7.2" transform="rotate(251 423.6 649.7)" fill="#2a3038"/>
+    <ellipse cx="434.0" cy="616.0" rx="10.8" ry="7.2" transform="rotate(323 434.0 616.0)" fill="#2a3038"/>
+    <ellipse cx="469.3" cy="615.5" rx="10.8" ry="7.2" transform="rotate(395 469.3 615.5)" fill="#2a3038"/>
+    <circle cx="568" cy="628" r="21.0" fill="#c7b8a8" opacity="0.55"/>
+    <ellipse cx="585.4" cy="649.9" rx="10.1" ry="6.7" transform="rotate(142 585.4 649.9)" fill="#2a3038"/>
+    <ellipse cx="546.1" cy="645.4" rx="10.1" ry="6.7" transform="rotate(232 546.1 645.4)" fill="#2a3038"/>
+    <ellipse cx="550.6" cy="606.1" rx="10.1" ry="6.7" transform="rotate(322 550.6 606.1)" fill="#2a3038"/>
+    <ellipse cx="589.9" cy="610.6" rx="10.1" ry="6.7" transform="rotate(412 589.9 610.6)" fill="#2a3038"/>
+    <circle cx="512" cy="724" r="18.0" fill="#c7b8a8" opacity="0.55"/>
+    <ellipse cx="511.3" cy="748.0" rx="8.6" ry="5.8" transform="rotate(182 511.3 748.0)" fill="#2a3038"/>
+    <ellipse cx="489.0" cy="730.7" rx="8.6" ry="5.8" transform="rotate(254 489.0 730.7)" fill="#2a3038"/>
+    <ellipse cx="498.5" cy="704.2" rx="8.6" ry="5.8" transform="rotate(326 498.5 704.2)" fill="#2a3038"/>
+    <ellipse cx="526.7" cy="705.0" rx="8.6" ry="5.8" transform="rotate(398 526.7 705.0)" fill="#2a3038"/>
+    <ellipse cx="534.6" cy="732.1" rx="8.6" ry="5.8" transform="rotate(470 534.6 732.1)" fill="#2a3038"/>
+    <circle cx="392" cy="700" r="9" fill="#2a3038"/>
+    <circle cx="632" cy="700" r="9" fill="#2a3038"/>
+    <circle cx="512" cy="570" r="8" fill="#2a3038"/>
+    <circle cx="600" cy="730" r="7" fill="#2a3038"/>
+    <circle cx="420" cy="600" r="7" fill="#2a3038"/>
+  </g></g>
+</svg>
