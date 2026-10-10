@@ -59,6 +59,8 @@
           <button class="diff-btn active" data-diff="medium" title="Medium: Standard wilderness">Med</button>
           <button class="diff-btn" data-diff="hard" title="Hard: Savage hunger, alert prey, fierce bosses">Hard</button>
         </div>
+
+        <button class="privacy-btn" id="btn-ad-privacy" style="display: none;">Ad privacy</button>
       </div>
 
       <!-- Active Hunting Quest -->
@@ -131,6 +133,17 @@
 
   <!-- Floating Combat Numbers & Alerts -->
   <div class="floating-text-container" id="floating-text-container"></div>
+
+  <!-- Death Screen -->
+  <div id="death-screen">
+    <h2>You Were Knocked Out!</h2>
+    <p>The mountains are unforgiving. Choose how to get back on your paws.</p>
+    <button class="death-btn death-btn-revive" id="btn-revive-ad">
+      📺 Watch an ad to revive here
+      <small>Full health &amp; stamina</small>
+    </button>
+    <button class="death-btn" id="btn-respawn">🏕️ Respawn at camp</button>
+  </div>
 
   <!-- Level Up Splash Notification -->
   <div id="levelup-banner">

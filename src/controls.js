@@ -81,7 +81,7 @@ export class InputManager {
           const target = document.elementFromPoint(t.clientX, t.clientY);
 
           // If touching action or difficulty buttons, let button handlers process it
-          if (target && target.closest('.action-btn, .diff-btn')) {
+          if (target && target.closest('.action-btn, .diff-btn, .death-btn, .privacy-btn')) {
             continue;
           }
 

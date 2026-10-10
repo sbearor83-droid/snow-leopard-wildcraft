@@ -64,5 +64,7 @@ npm run android        # vite build + npx cap sync android
 npx cap open android   # then Build > Generate Signed App Bundle / APK in Android Studio
 ```
 
+Ads use Google AdMob (Android app only). See the guide below for switching from test ads to your own ad units.
+
 Release signing reads `android/keystore.properties`, which is git-ignored. See
 [`release-builds/GOOGLE_PLAY_UPLOAD_GUIDE.md`](release-builds/GOOGLE_PLAY_UPLOAD_GUIDE.md) for creating a keystore and uploading to Google Play.

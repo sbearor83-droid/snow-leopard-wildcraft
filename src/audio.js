@@ -20,6 +20,13 @@ class SoundManager {
     }
   }
 
+  // Silences the game while a full-screen ad plays its own audio
+  setSuspended(suspended) {
+    if (!this.ctx) return;
+    if (suspended) this.ctx.suspend();
+    else this.ctx.resume();
+  }
+
   // True when sounds can be played right now
   isReady() {
     return this.ctx !== null && this.ctx.state === 'running';
