@@ -716,6 +716,20 @@ export class PreyAnimal {
     if (this.speed > 0.1) {
       this.position.x += Math.sin(this.facingAngle) * this.speed * delta;
       this.position.z += Math.cos(this.facingAngle) * this.speed * delta;
+
+      // Dynamic hoof/paw prints on snow when running or charging
+      if (this.speed > 2.8) {
+        this.stepTimer = (this.stepTimer || 0) + delta;
+        if (this.stepTimer > 0.18) {
+          this.stepTimer = 0;
+          this.terrain.addPawPrint(
+            this.position.x,
+            this.position.z,
+            this.facingAngle,
+            this.isBoss ? 1.6 : (this.type === 'ibex' ? 0.95 : 0.6)
+          );
+        }
+      }
     }
 
     // Keep within world bounds

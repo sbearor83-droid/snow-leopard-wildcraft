@@ -62,70 +62,79 @@ export class SnowLeopard {
     this.mesh.position.copy(this.position);
   }
 
-  // Generates authentic Snow Leopard rosette spotted fur texture
+  // Generates high-definition authentic Snow Leopard rosette spotted fur texture
   createFurTexture() {
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 1024;
+    canvas.height = 1024;
     const ctx = canvas.getContext('2d');
 
-    // Smoky off-white / pale-cream base
-    ctx.fillStyle = '#dde3e8';
-    ctx.fillRect(0, 0, 512, 512);
+    // Base smoky cream with cold blue-grey alpine tint
+    ctx.fillStyle = '#dde5eb';
+    ctx.fillRect(0, 0, 1024, 1024);
 
-    // Warm cream tint on back
-    const grad = ctx.createLinearGradient(0, 0, 0, 512);
-    grad.addColorStop(0, '#ccd4db');
-    grad.addColorStop(0.5, '#e4ebf0');
-    grad.addColorStop(1, '#f5f7fa');
+    // Warm ochre-tan dorsal mantle and cold snow-white gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, 1024);
+    grad.addColorStop(0.0, '#b8c4ce'); // Spine top shade
+    grad.addColorStop(0.2, '#d6dee4');
+    grad.addColorStop(0.5, '#eef3f7'); // Flanks
+    grad.addColorStop(0.85, '#f8fafc'); // White belly/throat
+    grad.addColorStop(1.0, '#ffffff');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 512);
+    ctx.fillRect(0, 0, 1024, 1024);
 
-    // Fine fur grain
-    for (let i = 0; i < 6000; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      ctx.fillStyle = Math.random() > 0.5 ? 'rgba(200, 210, 220, 0.25)' : 'rgba(255, 255, 255, 0.35)';
-      ctx.fillRect(x, y, 2, 2);
+    // Microscopic fur grain fibers
+    for (let i = 0; i < 18000; i++) {
+      const x = Math.random() * 1024;
+      const y = Math.random() * 1024;
+      ctx.fillStyle = Math.random() > 0.45 ? 'rgba(185, 200, 215, 0.28)' : 'rgba(255, 255, 255, 0.45)';
+      ctx.fillRect(x, y, 2.5, 2.5);
     }
 
-    // Snow Leopard Rosettes (open rings with dark centers)
-    ctx.strokeStyle = '#2d3238';
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 95; i++) {
-      const rx = Math.random() * 512;
-      const ry = Math.random() * 512;
-      const radius = 6 + Math.random() * 10;
+    // Authentic Snow Leopard Rosettes (open rings with broken charcoal spots & warm shadowed centers)
+    for (let i = 0; i < 160; i++) {
+      const rx = Math.random() * 1024;
+      const ry = 60 + Math.random() * 850; // Focused on flanks and back
+      const radius = 12 + Math.random() * 18;
       const numPetals = 4 + Math.floor(Math.random() * 3);
 
       ctx.save();
       ctx.translate(rx, ry);
+
+      // Warm taupe-sepia center inside rosette
+      ctx.fillStyle = 'rgba(165, 148, 136, 0.42)';
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Outer ring of charcoal spot petals
       for (let p = 0; p < numPetals; p++) {
-        const angle = (p / numPetals) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+        const angle = (p / numPetals) * Math.PI * 2 + (Math.random() - 0.5) * 0.45;
         const px = Math.cos(angle) * radius;
         const py = Math.sin(angle) * radius;
-        ctx.fillStyle = '#26292d';
+        ctx.fillStyle = '#22252a';
         ctx.beginPath();
-        ctx.arc(px, py, 2.5 + Math.random() * 2, 0, Math.PI * 2);
+        ctx.arc(px, py, 4.5 + Math.random() * 3.5, 0, Math.PI * 2);
         ctx.fill();
       }
-      // Warm shadow center inside rosette
-      ctx.fillStyle = 'rgba(175, 160, 150, 0.35)';
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 0.65, 0, Math.PI * 2);
-      ctx.fill();
       ctx.restore();
     }
 
-    // Solid dark spots on limbs/face
-    for (let i = 0; i < 120; i++) {
-      const sx = Math.random() * 512;
-      const sy = Math.random() * 512;
-      ctx.fillStyle = '#22252a';
+    // Solid dark spots on lower limbs, face, and ears
+    for (let i = 0; i < 280; i++) {
+      const sx = Math.random() * 1024;
+      const sy = Math.random() * 1024;
+      ctx.fillStyle = '#1c1f24';
       ctx.beginPath();
-      ctx.arc(sx, sy, 2 + Math.random() * 2.5, 0, Math.PI * 2);
+      ctx.arc(sx, sy, 3.5 + Math.random() * 4.0, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // Soft charcoal paw pad impressions in texture corner
+    ctx.fillStyle = '#26292e';
+    ctx.beginPath();
+    ctx.ellipse(880, 880, 45, 38, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     const tex = new THREE.CanvasTexture(canvas);
     return tex;
@@ -227,7 +236,7 @@ export class SnowLeopard {
     rightEye.position.set(-0.32, 0.12, 0.42);
     this.head.add(leftEye, rightEye);
 
-    // Pupils
+    // Pupils & Specular Eye Highlights
     const pupilGeo = new THREE.BoxGeometry(0.04, 0.14, 0.05);
     const leftPupil = new THREE.Mesh(pupilGeo, darkMat);
     leftPupil.position.set(0.35, 0.12, 0.5);
@@ -235,8 +244,30 @@ export class SnowLeopard {
     rightPupil.position.set(-0.35, 0.12, 0.5);
     this.head.add(leftPupil, rightPupil);
 
-    // Rounded Snow Leopard Ears
-    const earGeo = new THREE.ConeGeometry(0.22, 0.35, 5);
+    const eyeGlintGeo = new THREE.SphereGeometry(0.025, 4, 4);
+    const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const leftGlint = new THREE.Mesh(eyeGlintGeo, glintMat);
+    leftGlint.position.set(0.37, 0.15, 0.51);
+    const rightGlint = new THREE.Mesh(eyeGlintGeo, glintMat);
+    rightGlint.position.set(-0.33, 0.15, 0.51);
+    this.head.add(leftGlint, rightGlint);
+
+    // Whiskers (feline sensory vibrissae)
+    const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+    for (let w = -1; w <= 1; w++) {
+      const leftW = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.42, 3), whiskerMat);
+      leftW.rotation.z = Math.PI / 2 + w * 0.22;
+      leftW.position.set(0.38, -0.16 + w * 0.04, 0.68);
+      this.head.add(leftW);
+
+      const rightW = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.42, 3), whiskerMat);
+      rightW.rotation.z = -Math.PI / 2 - w * 0.22;
+      rightW.position.set(-0.38, -0.16 + w * 0.04, 0.68);
+      this.head.add(rightW);
+    }
+
+    // Rounded Snow Leopard Ears with White Inner Tuft
+    const earGeo = new THREE.ConeGeometry(0.24, 0.38, 6);
     const leftEar = new THREE.Mesh(earGeo, bodyMat);
     leftEar.position.set(0.35, 0.48, -0.1);
     leftEar.rotation.set(-0.2, 0, -0.3);
@@ -246,7 +277,7 @@ export class SnowLeopard {
     this.head.add(leftEar, rightEar);
 
     // --- Iconic Long Thick Snow Leopard Tail ---
-    // Snow leopards have thick, balance-assisting tails that reach 90-100cm!
+    // Snow leopards have exceptionally thick, bushy tails for mountain balance & warmth
     this.tailSegments = [];
     let parentTailNode = this.hips;
     const numSegments = 5;
@@ -258,9 +289,9 @@ export class SnowLeopard {
         segGroup.position.set(0, -0.1, -0.45);
       }
 
-      // Slightly thicker near middle, rounded tip at end
-      const thickness = 0.26 + Math.sin((i / numSegments) * Math.PI) * 0.08;
-      const segMesh = new THREE.Mesh(new THREE.CylinderGeometry(thickness * 0.85, thickness, 0.5, 7), bodyMat);
+      // Significantly thicker, rounder and plusher
+      const thickness = 0.35 + Math.sin((i / numSegments) * Math.PI) * 0.12;
+      const segMesh = new THREE.Mesh(new THREE.CylinderGeometry(thickness * 0.88, thickness, 0.52, 8), bodyMat);
       segMesh.rotation.x = Math.PI / 2.3;
       segMesh.castShadow = true;
       segGroup.add(segMesh);
@@ -269,6 +300,22 @@ export class SnowLeopard {
       this.tailSegments.push(segGroup);
       parentTailNode = segGroup;
     }
+
+    // --- 3D Luminous Claw Slash Arc Effect ---
+    const slashGeo = new THREE.RingGeometry(0.9, 1.6, 16, 1, 0, Math.PI * 0.75);
+    slashGeo.rotateX(-Math.PI / 2);
+    const slashMat = new THREE.MeshBasicMaterial({
+      color: 0x67e8f9,
+      transparent: true,
+      opacity: 0.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    this.slashMesh = new THREE.Mesh(slashGeo, slashMat);
+    this.slashMesh.position.set(0.1, 1.15, 1.2);
+    this.slashMesh.rotation.y = -0.3;
+    this.bodyRoot.add(this.slashMesh);
 
     // --- Four Articulated Legs ---
     this.legs = {
@@ -386,6 +433,11 @@ export class SnowLeopard {
     this.pounceCooldown = 1.8;
     this.stamina = Math.max(0, this.stamina - 25);
 
+    // Burst snow spray ring at leap takeoff
+    for (let i = 0; i < 8; i++) {
+      this.emitSnowPuff(this.position);
+    }
+
     sounds.playPounce();
     return true;
   }
@@ -397,6 +449,12 @@ export class SnowLeopard {
     this.swipeTimer = this.swipeDuration;
     this.swipeCooldown = 0.35;
     this.stamina = Math.max(0, this.stamina - 6);
+
+    // Trigger luminous 3D claw slash arc
+    if (this.slashMesh) {
+      this.slashMesh.material.opacity = 0.95;
+      this.slashMesh.scale.set(0.65, 0.65, 0.65);
+    }
 
     sounds.playSwipe();
     return true;
@@ -472,9 +530,17 @@ export class SnowLeopard {
 
     if (this.isSwiping) {
       this.swipeTimer -= delta;
+      if (this.slashMesh) {
+        const progress = 1.0 - Math.max(0, this.swipeTimer / this.swipeDuration);
+        this.slashMesh.scale.setScalar(0.65 + progress * 0.95);
+        this.slashMesh.material.opacity = (1.0 - progress) * 0.95;
+      }
       if (this.swipeTimer <= 0) {
         this.isSwiping = false;
+        if (this.slashMesh) this.slashMesh.material.opacity = 0;
       }
+    } else if (this.slashMesh && this.slashMesh.material.opacity > 0) {
+      this.slashMesh.material.opacity = 0;
     }
 
     // Hunger drain (scaled by difficulty)

@@ -45,6 +45,31 @@ html, body {
   opacity: 1;
 }
 
+/* Cinematic Lens Vignette & Atmospheric Color Grading (0% WebGL GPU cost, 100% crash-proof) */
+#cinematic-vignette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 3;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 58%, rgba(8, 14, 24, 0.42) 100%);
+}
+
+#cinematic-grade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 3;
+  mix-blend-mode: soft-light;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.08) 0%, rgba(245, 158, 11, 0.05) 100%);
+  opacity: 0.9;
+}
+
 /* --- HUD OVERLAYS --- */
 .hud-layer {
   position: absolute;

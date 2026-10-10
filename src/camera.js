@@ -65,16 +65,20 @@ export class GameCamera {
     this.pitch = THREE.MathUtils.clamp(this.pitch + dy * 0.006, this.minPitch, this.maxPitch);
   }
 
-  update(delta, playerPos, isSprinting, isPouncing) {
-    // Follow player chest
-    this.targetLookAt.set(playerPos.x, playerPos.y + 1.6, playerPos.z);
+  update(delta, playerPos, isSprinting, isPouncing, isStalking = false) {
+    // Follow player chest (dips lower in stalking mode for predator prowl perspective)
+    this.targetLookAt.set(playerPos.x, playerPos.y + (isStalking ? 1.25 : 1.6), playerPos.z);
     this.target.lerp(this.targetLookAt, delta * 10);
+
+    // Dynamic cinematic distance: pulls in close when stalking, pulls back when sprinting
+    const targetDist = isStalking ? (this.distance * 0.82) : (isPouncing ? (this.distance * 0.88) : (isSprinting ? (this.distance * 1.15) : this.distance));
+    this.currentFollowDist = THREE.MathUtils.lerp(this.currentFollowDist || this.distance, targetDist, delta * 5);
 
     // Calculate desired camera orbit offset
     const cosPitch = Math.cos(this.pitch);
-    const offsetX = Math.sin(this.yaw) * cosPitch * this.distance;
-    const offsetY = Math.sin(this.pitch) * this.distance;
-    const offsetZ = Math.cos(this.yaw) * cosPitch * this.distance;
+    const offsetX = Math.sin(this.yaw) * cosPitch * this.currentFollowDist;
+    const offsetY = Math.sin(this.pitch) * this.currentFollowDist;
+    const offsetZ = Math.cos(this.yaw) * cosPitch * this.currentFollowDist;
 
     const desiredPos = this.desiredPos.set(this.target.x + offsetX, this.target.y + offsetY, this.target.z + offsetZ);
 
@@ -88,8 +92,8 @@ export class GameCamera {
     this.camera.position.copy(this.smoothPos);
     this.camera.lookAt(this.target);
 
-    // Speed sensation dynamic FOV
-    const targetFov = isPouncing ? 75 : (isSprinting ? 68 : 60);
+    // Dynamic cinematic action FOV
+    const targetFov = isPouncing ? 75 : (isSprinting ? 68 : (isStalking ? 54 : 60));
     this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, delta * 6);
     this.camera.updateProjectionMatrix();
   }

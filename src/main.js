@@ -25,8 +25,7 @@ class Game {
 
     // Setup Three.js Scene & Renderer
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xbdd4e7);
-    this.scene.fog = new THREE.FogExp2(0xc0d8ec, 0.0075);
+    this.scene.fog = new THREE.Fog(0xc2daf0, 90, 580);
 
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 800);
 
@@ -44,7 +43,7 @@ class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.12;
     this.container.appendChild(this.renderer.domElement);
 
     // Context loss guards to prevent Android GPU driver freezes
@@ -127,26 +126,32 @@ class Game {
   }
 
   setupLighting() {
-    // Hemispherical Ambient Light (cool blue sky + snow bounce reflection)
-    const hemiLight = new THREE.HemisphereLight(0xe8f4ff, 0x90a4ae, 0.75);
+    // Hemispherical Ambient Light (azure alpine sky + warm snow ground reflection)
+    const hemiLight = new THREE.HemisphereLight(0xbfdbfe, 0xcfdce8, 0.85);
     this.scene.add(hemiLight);
 
     // Directional Alpine Sun Light with Crisp Shadows
-    this.sunLight = new THREE.DirectionalLight(0xfffaed, 1.4);
-    this.sunLight.position.set(60, 90, 45);
+    this.sunLight = new THREE.DirectionalLight(0xfff6e5, 1.8);
+    this.sunLight.position.set(65, 85, 45);
     this.sunLight.castShadow = true;
-    const shadowRes = this.isMobile ? 1024 : 1536;
+    const shadowRes = this.isMobile ? 1024 : 2048;
     this.sunLight.shadow.mapSize.width = shadowRes;
     this.sunLight.shadow.mapSize.height = shadowRes;
     this.sunLight.shadow.camera.near = 10;
-    this.sunLight.shadow.camera.far = 150;
+    this.sunLight.shadow.camera.far = 160;
     const shadowDist = 45;
     this.sunLight.shadow.camera.left = -shadowDist;
     this.sunLight.shadow.camera.right = shadowDist;
     this.sunLight.shadow.camera.top = shadowDist;
     this.sunLight.shadow.camera.bottom = -shadowDist;
-    this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.bias = -0.0004;
+    this.sunLight.shadow.normalBias = 0.02;
     this.scene.add(this.sunLight);
+
+    // Cinematic Rim Light (back-light silhouetting feline and prey muscles/fur)
+    this.rimLight = new THREE.DirectionalLight(0x93c5fd, 0.85);
+    this.rimLight.position.set(-50, 40, -40);
+    this.scene.add(this.rimLight);
   }
 
   cacheUIElements() {
@@ -469,10 +474,26 @@ class Game {
     // 2. Update Snow Leopard Player
     this.player.update(delta, moveVec, this.input.isSprinting, this.input.isStalking);
 
-    // 3. Keep Sun Light following player for sharp shadow map coverage
-    this.sunLight.position.set(this.player.position.x + 60, 90, this.player.position.z + 45);
+    // Dynamic Paw Print Tracks on snow
+    if (this.player.currentSpeed > 1.2) {
+      this.stepTimer = (this.stepTimer || 0) + delta;
+      const interval = this.player.isSprinting ? 0.12 : 0.22;
+      if (this.stepTimer > interval) {
+        this.stepTimer = 0;
+        this.terrain.addPawPrint(this.player.position.x, this.player.position.z, this.player.facingAngle, this.player.isSprinting ? 1.3 : 1.0);
+      }
+    }
+
+    // 3. Keep Sun Light & Rim Light following player for sharp shadow map coverage
+    this.sunLight.position.set(this.player.position.x + 65, 85, this.player.position.z + 45);
     this.sunLight.target.position.copy(this.player.position);
     this.sunLight.target.updateMatrixWorld();
+
+    if (this.rimLight) {
+      this.rimLight.position.set(this.player.position.x - 50, 40, this.player.position.z - 40);
+      this.rimLight.target.position.copy(this.player.position);
+      this.rimLight.target.updateMatrixWorld();
+    }
 
     // 4. Update Prey AI
     this.preyManager.update(delta, this.player);
@@ -490,7 +511,7 @@ class Game {
     this.scentVision.update(delta, this.player.position, this.preyManager.preyList);
 
     // 8. Update Camera Follow & Collision
-    this.gameCam.update(delta, this.player.position, this.player.isSprinting, this.player.isPouncing);
+    this.gameCam.update(delta, this.player.position, this.player.isSprinting, this.player.isPouncing, this.player.isStalking);
 
     // 9. Update Weather (blowing mountain snow particles)
     this.terrain.update(delta, this.player.position);
