@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { sounds } from './audio.js';
-import { shortestAngleDiff } from './utils.js';
+import { shortestAngleDiff, isMobileDevice } from './utils.js';
 
 const _terrainNormal = new THREE.Vector3();
 const _tmpMat = new THREE.Matrix4();
@@ -17,8 +17,7 @@ const MODEL_SCALE = 3.0;
 const CLIP_STRIDE_SPEED = { Walk: 0.926, Run: 2.55, ProwlWalk: 1.82 };
 
 // Fur shell rendering (extruded alpha-tested copies of the skinned mesh)
-const IS_MOBILE = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
-const FUR_SHELLS = IS_MOBILE ? 5 : 10;
+const FUR_SHELLS = isMobileDevice() ? 5 : 10;
 const FUR_LENGTH = 0.019; // model units before scaling (~6 cm in-game)
 
 // Snow Leopard player: skinned 3D model, skeletal animation state machine & wildcraft survival stats
@@ -66,7 +65,6 @@ export class SnowLeopard {
     this.hitTimer = 0;
     this.swipeSide = 0;
     this.hungerRate = 0.4;
-    this.animTime = 0;
     this.leanAngle = 0;
 
     // Scene root for the leopard (position / heading / slope alignment)

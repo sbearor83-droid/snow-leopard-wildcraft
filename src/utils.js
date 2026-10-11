@@ -13,3 +13,8 @@ export function lerpAngle(from, to, t) {
   const result = from + shortestAngleDiff(from, to) * Math.min(1, t);
   return shortestAngleDiff(0, result);
 }
+
+// Phones and tablets get the lighter rendering path (fewer fur shells, coarser terrain, no AA)
+export function isMobileDevice() {
+  return /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
+}

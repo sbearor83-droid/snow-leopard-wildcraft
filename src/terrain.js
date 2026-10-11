@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { smooth, fbm3, noise2, fbm2, tileFbm2, tileNoise2, makeRng, heightToNormalTexture } from './procgen.js';
+import { isMobileDevice } from './utils.js';
 
-const IS_MOBILE = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
+const IS_MOBILE = isMobileDevice();
 
 // Procedural Himalayan Mountain Terrain & Environment
 export class MountainEnvironment {

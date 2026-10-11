@@ -768,14 +768,15 @@ export class PreyAnimal {
       this.chargeTimer -= delta;
       if (this.chargeCooldown > 0) this.chargeCooldown -= delta;
 
-      targetSpeed = this.chargeSpeed * speedMult;
+      // Thunder in, then hold at horn range rather than trampling straight through the leopard
+      targetSpeed = distToPlayer < 3.6 ? 0 : this.chargeSpeed * speedMult;
       const targetAngle = Math.atan2(dirToPlayer.x, dirToPlayer.z);
       this.facingAngle = lerpAngle(this.facingAngle, targetAngle, delta * 5);
 
       this.headNode.rotation.x = 0.55; // Lower horns ready to ram!
 
       // Ramming Snow Leopard
-      if (distToPlayer < 3.2 && this.chargeCooldown <= 0) {
+      if (distToPlayer < 3.8 && this.chargeCooldown <= 0) {
         this.chargeCooldown = 2.4;
         player.takeDamage(this.ramDamage);
         sounds.playBossGrunt();
@@ -852,6 +853,18 @@ export class PreyAnimal {
 
     // Solid collision against rocks and tree trunks
     this.terrain.resolveCollision(this.position, this.isBoss ? 1.4 : (this.type === 'ibex' ? 0.75 : 0.4));
+
+    // A yak is a wall of muscle: keep the leopard (and the camera) out of its body
+    if (this.isBoss) {
+      const minGap = 2.9;
+      const gapSq = (player.position.x - this.position.x) ** 2 + (player.position.z - this.position.z) ** 2;
+      if (gapSq < minGap * minGap && gapSq > 0.0001) {
+        const gap = Math.sqrt(gapSq);
+        const push = (minGap - gap) / gap;
+        player.position.x += (player.position.x - this.position.x) * push;
+        player.position.z += (player.position.z - this.position.z) * push;
+      }
+    }
 
     // Terrain ground clamp
     const groundY = this.terrain.getTerrainHeight(this.position.x, this.position.z);

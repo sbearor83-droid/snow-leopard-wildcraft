@@ -7,12 +7,11 @@ import { InputManager } from './controls.js';
 import { ScentVision } from './scent.js';
 import { sounds } from './audio.js';
 import { ads } from './ads.js';
+import { isMobileDevice } from './utils.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
-function detectMobile() {
-  return /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
-}
+const detectMobile = isMobileDevice;
 
 function pixelRatioFor(isMobile) {
   return isMobile ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5);
