@@ -11,6 +11,8 @@ const EATEN_DISSOLVE_TIME = 6;
 // One model per prey type is built once and cloned; clones share geometry and materials
 const MODEL_CACHE = {};
 const FUR_MATERIALS = {};
+const GLINT_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const WHISKER_MAT = new THREE.MeshBasicMaterial({ color: 0xf2f2f0, transparent: true, opacity: 0.75, depthWrite: false });
 
 // Scratch vectors reused every frame to avoid per-frame allocations
 const _toPlayer = new THREE.Vector3();
@@ -324,10 +326,30 @@ export class PreyAnimal {
     return leg;
   }
 
+  // Glossy dark eye with a specular highlight so faces read from a distance
   addEye(parent, x, y, z, r, mat) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mat);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), mat);
     eye.position.set(x, y, z);
     parent.add(eye);
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(r * 0.28, 6, 6), GLINT_MAT);
+    // highlight sits on the upper-outer-front of the eyeball
+    glint.position.set(x + Math.sign(x) * r * 0.35, y + r * 0.45, z + r * 0.7);
+    parent.add(glint);
+  }
+
+  // Thin whiskers fanning out from the muzzle pads
+  addWhiskers(parent, x, y, z, length, count = 3) {
+    const geo = new THREE.CylinderGeometry(length * 0.006, length * 0.002, length, 3, 1, true);
+    geo.translate(0, length * 0.5, 0);
+    geo.rotateX(Math.PI / 2);
+    for (let side = -1; side <= 1; side += 2) {
+      for (let w = 0; w < count; w++) {
+        const whisker = new THREE.Mesh(geo, WHISKER_MAT);
+        whisker.position.set(side * x, y + (w - (count - 1) / 2) * length * 0.05, z);
+        whisker.rotation.set(0.1 - w * 0.12, side * (1.0 + w * 0.18), 0);
+        parent.add(whisker);
+      }
+    }
   }
 
   // Himalayan ibex: stocky grey-brown winter coat, dark dorsal stripe and legs, pale belly and
@@ -337,7 +359,7 @@ export class PreyAnimal {
     const mat = this.furMaterial('ibex');
     const hornMat = new THREE.MeshStandardMaterial({ color: 0x5b5048, roughness: 0.55, metalness: 0.05 });
     const hoofMat = new THREE.MeshStandardMaterial({ color: 0x2b2420, roughness: 0.6 });
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.25 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.15 });
 
     const dorsal = new THREE.Color(0x6f5f4d), flank = new THREE.Color(0x9c8d77), belly = new THREE.Color(0xd9d0c1);
     const stripe = new THREE.Color(0x2f2620), rumpPatch = new THREE.Color(0xe6dfd3), c = new THREE.Color();
@@ -422,7 +444,7 @@ export class PreyAnimal {
         { x: side * 0.4, y: 0.76, z: 0.18, rx: 0.02, ry: 0.015 }
       ], 3), 8, () => flank), mat);
       headNode.add(ear);
-      this.addEye(headNode, side * 0.15, 0.66, 0.66, 0.035, eyeMat);
+      this.addEye(headNode, side * 0.155, 0.67, 0.66, 0.05, eyeMat);
     }
 
     // Short tail
@@ -452,9 +474,9 @@ export class PreyAnimal {
   buildHareModel() {
     const group = new THREE.Group();
     const mat = this.furMaterial('hare');
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.25 });
-    const noseMat = new THREE.MeshStandardMaterial({ color: 0xd9929a, roughness: 0.6 });
-    const white = new THREE.Color(0xf4f5f7), greyBack = new THREE.Color(0xd7dce2), earTip = new THREE.Color(0x1d1d20), c = new THREE.Color();
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x14100e, roughness: 0.15 });
+    const noseMat = new THREE.MeshStandardMaterial({ color: 0xd98a93, roughness: 0.5 });
+    const white = new THREE.Color(0xf4f5f7), greyBack = new THREE.Color(0xd7dce2), earTip = new THREE.Color(0x1d1d20), innerEar = new THREE.Color(0xd9b8b8), c = new THREE.Color();
     const coat = (i, t, up, side, px, py, pz) => c.copy(white).lerp(greyBack, Math.max(0, up) * 0.6 * (1 - Math.abs(t - 0.5)));
 
     const body = buildTube(smoothPath([
@@ -480,9 +502,21 @@ export class PreyAnimal {
       { x: 0, y: 0.05, z: 0.39, rx: 0.02, ry: 0.02 }
     ], 4), 14, coat, { uScale: 2, vScale: 1.5 });
     headNode.add(new THREE.Mesh(head, mat));
-    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), noseMat);
-    nose.position.set(0, 0.06, 0.38);
+    // nose, split upper lip, whisker pads and whiskers
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.034, 10, 8), noseMat);
+    nose.scale.set(1.15, 0.85, 0.8);
+    nose.position.set(0, 0.075, 0.385);
     headNode.add(nose);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.05, 0.02), new THREE.MeshStandardMaterial({ color: 0xb0a4a2, roughness: 0.8 }));
+    lip.position.set(0, 0.04, 0.37);
+    headNode.add(lip);
+    for (let side = -1; side <= 1; side += 2) {
+      const pad = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), mat);
+      pad.scale.set(1, 0.8, 1);
+      pad.position.set(side * 0.045, 0.04, 0.33);
+      headNode.add(pad);
+    }
+    this.addWhiskers(headNode, 0.05, 0.05, 0.36, 0.3, 3);
 
     for (let side = -1; side <= 1; side += 2) {
       const ear = new THREE.Mesh(buildTube(smoothPath([
@@ -490,10 +524,11 @@ export class PreyAnimal {
         { x: side * 0.08, y: 0.42, z: -0.06, rx: 0.06, ry: 0.022 },
         { x: side * 0.11, y: 0.64, z: -0.14, rx: 0.045, ry: 0.018 },
         { x: side * 0.12, y: 0.72, z: -0.17, rx: 0.012, ry: 0.01 }
-      ], 4), 10, (i, t) => (t > 0.82 ? earTip : white)), mat);
+      ], 4), 10, (i, t, up, sd) => (t > 0.82 ? earTip : (sd * side < -0.5 && t < 0.75 ? innerEar : white))), mat);
       ear.castShadow = true;
       headNode.add(ear);
-      this.addEye(headNode, side * 0.1, 0.14, 0.2, 0.028, eyeMat);
+      // large dark hare eyes, set high and to the side of the skull
+      this.addEye(headNode, side * 0.105, 0.155, 0.19, 0.042, eyeMat);
     }
 
     const tail = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), mat);
@@ -517,7 +552,7 @@ export class PreyAnimal {
     const mat = this.furMaterial('yak');
     const hornMat = new THREE.MeshStandardMaterial({ color: 0xcdc3b2, roughness: 0.5, metalness: 0.05 });
     const hoofMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.6 });
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x120f0d, roughness: 0.3 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x120f0d, roughness: 0.15 });
     const dark = new THREE.Color(0x2e221a), mid = new THREE.Color(0x4a3829), hump = new THREE.Color(0x7d6650), muzzle = new THREE.Color(0x9a948a), c = new THREE.Color();
     const coat = (i, t, up, side, px, py, pz) => {
       const n = fbm3(px * 2 + 5, py * 2, pz * 2, 2);
@@ -596,7 +631,7 @@ export class PreyAnimal {
         { x: side * 0.86, y: -0.06, z: 0.16, rx: 0.03, ry: 0.02 }
       ], 3), 8, () => dark), mat);
       headNode.add(ear);
-      this.addEye(headNode, side * 0.37, -0.05, 0.62, 0.05, eyeMat);
+      this.addEye(headNode, side * 0.38, -0.05, 0.62, 0.07, eyeMat);
     }
 
     const tail = new THREE.Mesh(buildTube(smoothPath([
