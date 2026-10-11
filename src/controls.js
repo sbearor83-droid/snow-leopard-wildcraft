@@ -14,6 +14,7 @@ export class InputManager {
     this.isPounceRequested = false;
     this.isSwipeRequested = false;
     this.isEatRequested = false;
+    this.isDigRequested = false;
     this.isScentRequested = false;
 
     // Mobile Virtual Joystick State
@@ -47,7 +48,9 @@ export class InputManager {
         this.isSwipeRequested = true;
       }
       if (e.code === 'KeyE') {
+        // E eats when next to a carcass, otherwise digs up nearby treasure
         this.isEatRequested = true;
+        this.isDigRequested = true;
       }
       if (e.code === 'KeyV') {
         this.isScentRequested = true;
@@ -81,7 +84,7 @@ export class InputManager {
           const target = document.elementFromPoint(t.clientX, t.clientY);
 
           // If touching action or difficulty buttons, let button handlers process it
-          if (target && target.closest('.action-btn, .diff-btn, .death-btn, .privacy-btn')) {
+          if (target && target.closest('.action-btn, .diff-btn, .death-btn, .privacy-btn, .menu-btn, .ui-overlay')) {
             continue;
           }
 
@@ -180,6 +183,7 @@ export class InputManager {
     this.setupButton('btn-stalk', () => (this.isStalking = !this.isStalking));
     this.setupButton('btn-scent', () => (this.isScentRequested = true));
     this.setupButton('btn-eat', () => (this.isEatRequested = true));
+    this.setupButton('btn-dig', () => (this.isDigRequested = true));
   }
 
   setupButton(id, callback) {

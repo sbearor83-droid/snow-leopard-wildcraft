@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { sounds } from './audio.js';
 import { shortestAngleDiff, isMobileDevice } from './utils.js';
+import { SLOTS, ACCESSORY_BY_ID } from './accessories.js';
 
 const _terrainNormal = new THREE.Vector3();
 const _tmpMat = new THREE.Matrix4();
@@ -41,6 +42,10 @@ export class SnowLeopard {
     this.meatConsumed = 0;
     this.isDowned = false;
     this.onDeath = null;
+
+    // Worn accessories: slot -> accessory id, and slot -> attached Object3D
+    this.equipped = {};
+    this.accessoryObjects = {};
 
     // Movement & State
     this.position = new THREE.Vector3(0, 0, 0);
@@ -123,6 +128,7 @@ export class SnowLeopard {
     this.modelRoot.add(model);
     if (this.skinnedMesh) this.createFurShells(this.skinnedMesh);
     this.addWhiskers();
+    for (const slot of Object.keys(this.equipped)) this.attachAccessory(slot);
 
     if (gltf.animations && gltf.animations.length > 0) {
       this.mixer = new THREE.AnimationMixer(model);
@@ -316,6 +322,34 @@ export class SnowLeopard {
     this.whiskers = whiskers;
   }
 
+  // Wears (or with a null id, removes) the accessory for a slot
+  setAccessory(slot, id) {
+    this.equipped[slot] = id || null;
+    this.attachAccessory(slot);
+  }
+
+  attachAccessory(slot) {
+    const old = this.accessoryObjects[slot];
+    if (old) {
+      old.removeFromParent();
+      old.traverse((o) => o.geometry && o.geometry.dispose());
+      delete this.accessoryObjects[slot];
+    }
+    const item = ACCESSORY_BY_ID[this.equipped[slot]];
+    if (!item || !this.skinnedMesh) return;
+
+    const skeleton = this.skinnedMesh.skeleton;
+    const boneIndex = skeleton.bones.findIndex((b) => b.name === SLOTS[slot].bone);
+    if (boneIndex < 0) return;
+
+    // The wrapper cancels the bone's bind transform, so items are authored in bind-pose model space
+    const wrapper = new THREE.Group();
+    skeleton.boneInverses[boneIndex].decompose(wrapper.position, wrapper.quaternion, wrapper.scale);
+    wrapper.add(item.build());
+    skeleton.bones[boneIndex].add(wrapper);
+    this.accessoryObjects[slot] = wrapper;
+  }
+
   // Minimal stand-in body if the GLB cannot be fetched (keeps the game playable)
   buildPlaceholder() {
     const mat = new THREE.MeshStandardMaterial({ color: 0xd9d9d4, roughness: 0.9 });
@@ -465,6 +499,25 @@ export class SnowLeopard {
     return true;
   }
 
+  // Paws at the snow to uncover buried treasure at `target`
+  dig(target) {
+    if (this.isSwiping || this.isPouncing || this.isDowned) return false;
+    this.facingAngle = Math.atan2(target.x - this.position.x, target.z - this.position.z);
+    this.isSwiping = true;
+    this.swipeTimer = this.swipeDuration;
+    this.swipeCooldown = 0.35;
+    this.biteTimer = 0;
+    this.swipeSide = 1 - this.swipeSide;
+    const name = this.swipeSide ? 'Attack_Left' : 'Attack_Right';
+    const action = this.actions[name];
+    if (action) {
+      action.timeScale = action.getClip().duration / (this.swipeDuration + 0.12);
+      this.playAction(name, 0.06, true);
+    }
+    for (let i = 0; i < 12; i++) this.emitSnowPuff(target);
+    return true;
+  }
+
   eat(prey) {
     if (!prey || !prey.isDead || prey.meatAmount <= 0 || this.isDowned) return false;
 
@@ -501,6 +554,31 @@ export class SnowLeopard {
     this.stamina = this.maxStamina;
     this.attackPower += 10;
     sounds.playLevelUp();
+  }
+
+  // Rebuilds stats from a saved game. Level bonuses are recomputed from the level so
+  // rebalancing levelUp() also applies to existing saves.
+  restoreProgress(saved) {
+    const level = Math.max(1, Math.floor(saved.level));
+    const gained = level - 1;
+    this.level = level;
+    this.xpToNext = 100;
+    for (let i = 0; i < gained; i++) this.xpToNext = Math.round(this.xpToNext * 1.5);
+    this.xp = THREE.MathUtils.clamp(saved.xp, 0, this.xpToNext - 1);
+    this.maxHp = 100 + gained * 20;
+    this.maxStamina = 100 + gained * 15;
+    this.attackPower = 35 + gained * 10;
+
+    // Never load into a dead or starving state
+    this.hp = THREE.MathUtils.clamp(saved.hp, this.maxHp * 0.5, this.maxHp);
+    this.stamina = THREE.MathUtils.clamp(saved.stamina, 0, this.maxStamina);
+    this.hunger = THREE.MathUtils.clamp(saved.hunger, 30, this.maxHunger);
+    this.preyHunted = Math.max(0, Math.floor(saved.preyHunted));
+    this.meatConsumed = Math.max(0, Math.floor(saved.meatConsumed));
+
+    this.position.set(saved.x, this.terrain.getTerrainHeight(saved.x, saved.z), saved.z);
+    this.facingAngle = saved.facingAngle;
+    this.mesh.position.copy(this.position);
   }
 
   takeDamage(amount) {

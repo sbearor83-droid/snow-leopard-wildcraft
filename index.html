@@ -56,6 +56,8 @@
         <div class="compass-bar">
           <div class="compass-heading" id="compass-heading">NORTH</div>
           <div class="prey-radar-text" id="prey-radar-text">Tracking Scent: Bharal Herd (45m)</div>
+          <div class="treasure-radar-text" id="treasure-radar-text"></div>
+          <div class="daily-stash-text" id="daily-stash-text"></div>
         </div>
 
         <div class="difficulty-toggle" id="difficulty-toggle">
@@ -65,6 +67,12 @@
         </div>
 
         <button class="privacy-btn" id="btn-ad-privacy" style="display: none;">Ad privacy</button>
+        <div class="menu-row">
+          <button class="menu-btn" id="btn-wardrobe" title="Wear the accessories you've found">🎒 Wardrobe <span id="wardrobe-count">0/0</span></button>
+          <button class="menu-btn shop-btn" id="btn-shop" title="Shop">🛒 <span class="wallet-amount" id="hud-pelts">🐾 0</span> <span class="wallet-amount" id="hud-crystals">💎 0</span></button>
+          <button class="menu-btn cloud-btn" id="btn-cloud" title="Cloud save" style="display: none;">☁️ <span id="cloud-badge"></span></button>
+          <button class="privacy-btn" id="btn-new-game">New game</button>
+        </div>
       </div>
 
       <!-- Active Hunting Quest -->
@@ -97,7 +105,7 @@
 
       <!-- Controls helper hint for desktop / mobile -->
       <div class="controls-hint">
-        WASD: Move | Shift: Sprint | C: Stalk | Space: Pounce | Q: Swipe | V: Scent | E: Eat
+        WASD: Move | Shift: Sprint | C: Stalk | Space: Pounce | Q: Swipe | V: Scent | E: Eat / Dig
       </div>
 
       <!-- Wildcraft Mobile Action Cluster -->
@@ -131,6 +139,11 @@
           🍖
           <span class="btn-label">Eat</span>
         </button>
+
+        <button class="action-btn" id="btn-dig" title="Dig up buried treasure">
+          ✨
+          <span class="btn-label">Dig</span>
+        </button>
       </div>
     </footer>
   </div>
@@ -147,6 +160,86 @@
       <small>Full health &amp; stamina</small>
     </button>
     <button class="death-btn" id="btn-respawn">🏕️ Respawn at camp</button>
+  </div>
+
+  <!-- Treasure Found -->
+  <div id="treasure-popup" class="ui-overlay">
+    <div class="ui-card treasure-card" id="treasure-card">
+      <div class="treasure-title">✨ You found something! ✨</div>
+      <div class="treasure-icon" id="treasure-icon">👑</div>
+      <div class="treasure-name" id="treasure-name">Gold Crown</div>
+      <div class="treasure-rarity" id="treasure-rarity">Rare</div>
+      <div class="treasure-bonus" id="treasure-bonus"></div>
+      <div class="ui-buttons">
+        <button class="death-btn death-btn-revive" id="btn-treasure-wear">Wear it</button>
+        <button class="death-btn" id="btn-treasure-close">Keep hunting</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily Login Reward -->
+  <div id="daily-popup" class="ui-overlay">
+    <div class="ui-card daily-card">
+      <div class="treasure-title">☀️ Daily reward</div>
+      <div class="daily-day" id="daily-day">Day 1</div>
+      <div class="daily-strip" id="daily-strip"></div>
+      <p class="daily-note" id="daily-note">Come back tomorrow to keep your streak going!</p>
+      <div class="ui-buttons">
+        <button class="death-btn death-btn-revive" id="btn-daily-claim">Claim</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shop -->
+  <div id="shop" class="ui-overlay">
+    <div class="ui-card wardrobe-card shop-card">
+      <div class="wardrobe-header">
+        <h2>🛒 Shop</h2>
+        <span class="shop-wallet" id="shop-wallet"></span>
+        <button class="wardrobe-close" id="btn-shop-close" aria-label="Close">✕</button>
+      </div>
+      <div id="shop-body"></div>
+    </div>
+  </div>
+
+  <!-- Cloud Save -->
+  <div id="cloud-panel" class="ui-overlay">
+    <div class="ui-card cloud-card">
+      <div class="wardrobe-header">
+        <h2>☁️ Cloud Save</h2>
+        <span class="wardrobe-progress"></span>
+        <button class="wardrobe-close" id="btn-cloud-close" aria-label="Close">✕</button>
+      </div>
+      <p class="cloud-intro">Sign in to keep your accessories, Pelts, Crystals and leopard safe in your Google account, even if you reinstall or get a new phone.</p>
+      <div class="cloud-status" id="cloud-status"></div>
+      <div class="cloud-error" id="cloud-error"></div>
+      <div class="ui-buttons">
+        <button class="death-btn death-btn-revive" id="btn-cloud-signin">Sign in with Google</button>
+        <button class="death-btn" id="btn-cloud-sync">Sync now</button>
+        <button class="death-btn" id="btn-cloud-signout">Sign out</button>
+      </div>
+      <button class="cloud-delete" id="btn-cloud-delete">Delete my cloud save</button>
+    </div>
+  </div>
+
+  <!-- Wardrobe -->
+  <div id="wardrobe" class="ui-overlay">
+    <div class="ui-card wardrobe-card">
+      <div class="wardrobe-header">
+        <h2>🎒 Wardrobe</h2>
+        <span class="wardrobe-progress" id="wardrobe-progress">0 / 0 found</span>
+        <button class="wardrobe-close" id="btn-wardrobe-close" aria-label="Close">✕</button>
+      </div>
+      <div class="wardrobe-tabs" role="tablist">
+        <button class="wardrobe-tab active" id="tab-wear" data-tab="wear" role="tab">🎒 Wear</button>
+        <button class="wardrobe-tab" id="tab-book" data-tab="book" role="tab">📖 Collection Book</button>
+      </div>
+      <div id="wardrobe-wear">
+        <p class="wardrobe-hint">Treasure is buried by rocks and trees. Look for a glimmer in the snow, or use 👃 Scent to light it up!</p>
+        <div id="wardrobe-slots"></div>
+      </div>
+      <div id="wardrobe-book" style="display: none;"></div>
+    </div>
   </div>
 
   <!-- Level Up Splash Notification -->
