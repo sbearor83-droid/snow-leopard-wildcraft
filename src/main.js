@@ -8,6 +8,7 @@ import { ScentVision } from './scent.js';
 import { sounds } from './audio.js';
 import { ads } from './ads.js';
 import { isMobileDevice } from './utils.js';
+import { AUTOSAVE_INTERVAL_MS, readSave, writeSave, clearSave } from './save.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -71,6 +72,7 @@ class Game {
     this.pounceHasHit = false;
     this.lastLevelSeen = 1;
     this.hudCache = new Map(); // element -> { prop: lastValue }, avoids redundant DOM writes
+    this.difficulty = 'medium';
 
     // Death screen (revive with a rewarded ad, or respawn at camp)
     this.player.onDeath = () => this.showDeathScreen();
@@ -83,6 +85,15 @@ class Game {
 
     // UI Cache
     this.cacheUIElements();
+
+    // Resume saved progress, then keep saving automatically
+    this.loadGame();
+    setInterval(() => this.saveGame(), AUTOSAVE_INTERVAL_MS);
+    // Android can kill a backgrounded app without warning, so save the moment it's hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.saveGame();
+    });
+    window.addEventListener('pagehide', () => this.saveGame());
 
     // Window Resize Event
     window.addEventListener('resize', () => this.onResize());
@@ -102,7 +113,8 @@ class Game {
     requestAnimationFrame(this.animate);
   }
 
-  setDifficulty(diff) {
+  setDifficulty(diff, announce = true) {
+    this.difficulty = diff;
     this.preyManager.setDifficulty(diff);
 
     if (diff === 'easy') {
@@ -117,11 +129,38 @@ class Game {
       b.classList.toggle('active', b.dataset.diff === diff);
     });
 
+    if (!announce) return;
+    this.saveGame();
+
     const diffNames = { easy: 'Easy (Relaxed Hunt)', medium: 'Medium (Wilderness Balanced)', hard: 'Hard (Apex Challenge)' };
     this.spawnFloatingText(`Mode: ${diffNames[diff] || diff}`, '#38bdf8', {
       x: window.innerWidth * 0.5,
       y: 110
     });
+  }
+
+  saveGame() {
+    // Don't snapshot the death screen; the save from just before death is kept instead
+    if (this.player.isDowned) return;
+    writeSave(this.player, this.difficulty);
+  }
+
+  loadGame() {
+    const save = readSave();
+    if (!save) return;
+    this.player.restoreProgress(save.player);
+    this.lastLevelSeen = this.player.level;
+    this.setDifficulty(save.difficulty, false);
+    this.spawnFloatingText(`Welcome back! Lv ${this.player.level}`, '#38bdf8', {
+      x: window.innerWidth * 0.5,
+      y: 110
+    });
+  }
+
+  startNewGame() {
+    if (!window.confirm('Start a new game? Your current leopard\'s progress will be erased.')) return;
+    clearSave();
+    window.location.reload();
   }
 
   setupLighting() {
@@ -186,6 +225,9 @@ class Game {
     this.btnAdPrivacy = document.getElementById('btn-ad-privacy');
     this.btnAdPrivacy.addEventListener('click', () => ads.showPrivacyOptions());
 
+    this.btnNewGame = document.getElementById('btn-new-game');
+    this.btnNewGame.addEventListener('click', () => this.startNewGame());
+
     // Difficulty buttons
     document.querySelectorAll('.diff-btn').forEach((btn) => {
       btn.addEventListener('pointerdown', (e) => {
@@ -230,6 +272,7 @@ class Game {
     }
 
     this.player.reviveHere();
+    this.saveGame();
     // Give the leopard a moment before a nearby boss can ram again
     for (const p of this.preyManager.preyList) {
       if (p.isBoss) p.chargeCooldown = Math.max(p.chargeCooldown, 3);
@@ -245,6 +288,7 @@ class Game {
     sounds.setSuspended(false);
     this.player.respawnAtCamp();
     this.hideDeathScreen();
+    this.saveGame();
   }
 
   spawnFloatingText(text, color, screenPos) {
@@ -302,6 +346,7 @@ class Game {
           y: screenPos.y - 30
         });
         this.player.addXp(prey.xpReward);
+        this.saveGame();
       }
       return true;
     }
@@ -378,6 +423,7 @@ class Game {
         if (fed) {
           const screenPos = this.getScreenCoords(this.player.position);
           this.spawnFloatingText(`+Meat! Hunger Restored`, '#22c55e', screenPos);
+          this.saveGame();
         }
       }
     } else {

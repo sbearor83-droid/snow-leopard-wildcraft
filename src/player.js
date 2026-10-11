@@ -503,6 +503,31 @@ export class SnowLeopard {
     sounds.playLevelUp();
   }
 
+  // Rebuilds stats from a saved game. Level bonuses are recomputed from the level so
+  // rebalancing levelUp() also applies to existing saves.
+  restoreProgress(saved) {
+    const level = Math.max(1, Math.floor(saved.level));
+    const gained = level - 1;
+    this.level = level;
+    this.xpToNext = 100;
+    for (let i = 0; i < gained; i++) this.xpToNext = Math.round(this.xpToNext * 1.5);
+    this.xp = THREE.MathUtils.clamp(saved.xp, 0, this.xpToNext - 1);
+    this.maxHp = 100 + gained * 20;
+    this.maxStamina = 100 + gained * 15;
+    this.attackPower = 35 + gained * 10;
+
+    // Never load into a dead or starving state
+    this.hp = THREE.MathUtils.clamp(saved.hp, this.maxHp * 0.5, this.maxHp);
+    this.stamina = THREE.MathUtils.clamp(saved.stamina, 0, this.maxStamina);
+    this.hunger = THREE.MathUtils.clamp(saved.hunger, 30, this.maxHunger);
+    this.preyHunted = Math.max(0, Math.floor(saved.preyHunted));
+    this.meatConsumed = Math.max(0, Math.floor(saved.meatConsumed));
+
+    this.position.set(saved.x, this.terrain.getTerrainHeight(saved.x, saved.z), saved.z);
+    this.facingAngle = saved.facingAngle;
+    this.mesh.position.copy(this.position);
+  }
+
   takeDamage(amount) {
     if (this.isDowned) return;
     this.hp = Math.max(0, this.hp - amount);

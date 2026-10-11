@@ -63,6 +63,9 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 
 ---
 
+### 💾 Saving
+Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position and difficulty are restored on the next launch. **New game** under the difficulty toggle wipes the save. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
+
 ## 📱 Building for Android
 
 The Capacitor Android project is already set up in `android/` (app ID `com.snowleopardworld.game`).
