@@ -8,7 +8,9 @@ import { ScentVision } from './scent.js';
 import { sounds } from './audio.js';
 import { ads } from './ads.js';
 import { isMobileDevice } from './utils.js';
-import { AUTOSAVE_INTERVAL_MS, readSave, writeSave, clearSave } from './save.js';
+import { AUTOSAVE_INTERVAL_MS, readSave, writeSave, clearSave, readCollection, writeCollection } from './save.js';
+import { ACCESSORIES, ACCESSORY_BY_ID, RARITIES, SLOTS } from './accessories.js';
+import { TreasureManager, pickReward } from './treasure.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -67,12 +69,16 @@ class Game {
     this.gameCam = new GameCamera(this.camera, this.terrain);
     this.input = new InputManager(this.gameCam);
     this.scentVision = new ScentVision(this.scene);
+    this.treasures = new TreasureManager(this.scene, this.terrain);
 
     // Track state
     this.pounceHasHit = false;
     this.lastLevelSeen = 1;
     this.hudCache = new Map(); // element -> { prop: lastValue }, avoids redundant DOM writes
     this.difficulty = 'medium';
+    this.isPaused = false; // world frozen while a menu (treasure popup, wardrobe) is open
+    this.nearTreasure = null;
+    this.lastFoundItem = null;
 
     // Death screen (revive with a rewarded ad, or respawn at camp)
     this.player.onDeath = () => this.showDeathScreen();
@@ -87,6 +93,7 @@ class Game {
     this.cacheUIElements();
 
     // Resume saved progress, then keep saving automatically
+    this.loadCollection();
     this.loadGame();
     setInterval(() => this.saveGame(), AUTOSAVE_INTERVAL_MS);
     // Android can kill a backgrounded app without warning, so save the moment it's hidden
@@ -140,8 +147,9 @@ class Game {
   }
 
   saveGame() {
-    // Don't snapshot the death screen; the save from just before death is kept instead
-    if (this.player.isDowned) return;
+    // Don't snapshot the death screen; the save from just before death is kept instead.
+    // Also skip while a new game reloads the page, or the pagehide save would undo the reset.
+    if (this.player.isDowned || this.isResetting) return;
     writeSave(this.player, this.difficulty);
   }
 
@@ -158,9 +166,162 @@ class Game {
   }
 
   startNewGame() {
-    if (!window.confirm('Start a new game? Your current leopard\'s progress will be erased.')) return;
+    if (!window.confirm('Start a new game? Your leopard\'s level and stats will be reset. Accessories you\'ve found are kept.')) return;
+    this.isResetting = true;
     clearSave();
     window.location.reload();
+  }
+
+  // ------------------------------------------------------------------ accessories
+  loadCollection() {
+    this.collection = readCollection(new Set(Object.keys(ACCESSORY_BY_ID)));
+    for (const [slot, id] of Object.entries(this.collection.equipped)) {
+      if (SLOTS[slot] && ACCESSORY_BY_ID[id].slot === slot) this.player.setAccessory(slot, id);
+      else delete this.collection.equipped[slot];
+    }
+    this.updateWardrobeCount();
+  }
+
+  // Wears an owned item, or takes it off if it's already worn
+  toggleAccessory(id) {
+    const item = ACCESSORY_BY_ID[id];
+    if (!item || !this.collection.owned.has(id)) return;
+    const wearing = this.collection.equipped[item.slot] === id;
+    if (wearing) delete this.collection.equipped[item.slot];
+    else this.collection.equipped[item.slot] = id;
+    this.player.setAccessory(item.slot, wearing ? null : id);
+    writeCollection(this.collection);
+  }
+
+  updateWardrobeCount() {
+    this.setText(this.wardrobeCount, `${this.collection.owned.size}/${ACCESSORIES.length}`);
+  }
+
+  setPaused(paused) {
+    this.isPaused = paused;
+    if (!paused) this.clearActionRequests();
+  }
+
+  // Drops any actions pressed while the world was frozen
+  clearActionRequests() {
+    this.input.isPounceRequested = false;
+    this.input.isSwipeRequested = false;
+    this.input.isEatRequested = false;
+    this.input.isDigRequested = false;
+    this.input.isScentRequested = false;
+  }
+
+  digTreasure(treasure) {
+    if (!this.player.dig(treasure.position)) return;
+    treasure.digging = true;
+    // Let the paws hit the snow before the reveal
+    setTimeout(() => this.revealTreasure(treasure), 450);
+  }
+
+  revealTreasure(treasure) {
+    this.treasures.collect(treasure);
+    const item = pickReward(treasure.rarity, this.collection.owned);
+    const screenPos = this.getScreenCoords(treasure.position);
+
+    if (!item) {
+      // Everything is collected: treasure still pays out XP
+      this.player.addXp(60);
+      this.spawnFloatingText('✨ Old trinket! +60 XP', '#c084fc', screenPos);
+      sounds.playTreasureFound();
+      this.saveGame();
+      return;
+    }
+
+    this.collection.owned.add(item.id);
+    writeCollection(this.collection);
+    this.updateWardrobeCount();
+    this.player.addXp(25);
+    this.saveGame();
+    sounds.playTreasureFound();
+    this.showTreasurePopup(item);
+  }
+
+  setRarityVars(el, rarity) {
+    const color = RARITIES[rarity].color;
+    el.style.setProperty('--rarity', color);
+    el.style.setProperty('--rarity-soft', `${color}99`);
+    el.style.setProperty('--rarity-dim', `${color}40`);
+  }
+
+  showTreasurePopup(item) {
+    this.lastFoundItem = item;
+    this.treasureIcon.textContent = item.icon;
+    this.treasureName.textContent = item.name;
+    this.treasureRarity.textContent = RARITIES[item.rarity].label;
+    this.setRarityVars(this.treasureCard, item.rarity);
+    // Restart the pop-in animation
+    this.treasureCard.style.animation = 'none';
+    void this.treasureCard.offsetWidth;
+    this.treasureCard.style.animation = '';
+    this.treasurePopup.style.display = 'flex';
+    this.setPaused(true);
+  }
+
+  hideTreasurePopup(wear) {
+    if (wear && this.lastFoundItem && this.collection.equipped[this.lastFoundItem.slot] !== this.lastFoundItem.id) {
+      this.toggleAccessory(this.lastFoundItem.id);
+    }
+    this.treasurePopup.style.display = 'none';
+    this.setPaused(false);
+  }
+
+  openWardrobe() {
+    if (this.player.isDowned) return;
+    this.renderWardrobe();
+    this.wardrobe.style.display = 'flex';
+    this.setPaused(true);
+  }
+
+  closeWardrobe() {
+    this.wardrobe.style.display = 'none';
+    this.setPaused(false);
+  }
+
+  renderWardrobe() {
+    this.wardrobeProgress.textContent = `${this.collection.owned.size} / ${ACCESSORIES.length} found`;
+    this.wardrobeSlots.replaceChildren();
+    for (const [slot, info] of Object.entries(SLOTS)) {
+      const title = document.createElement('div');
+      title.className = 'wardrobe-slot-title';
+      title.textContent = info.label;
+      const grid = document.createElement('div');
+      grid.className = 'wardrobe-items';
+
+      for (const item of ACCESSORIES.filter((a) => a.slot === slot)) {
+        const owned = this.collection.owned.has(item.id);
+        const btn = document.createElement('button');
+        btn.className = 'wardrobe-item';
+        btn.classList.toggle('locked', !owned);
+        btn.classList.toggle('equipped', this.collection.equipped[slot] === item.id);
+        this.setRarityVars(btn, item.rarity);
+
+        const icon = document.createElement('span');
+        icon.className = 'item-icon';
+        icon.textContent = item.icon;
+        const name = document.createElement('span');
+        name.textContent = owned ? item.name : '???';
+        const rarity = document.createElement('span');
+        rarity.className = 'item-rarity';
+        rarity.textContent = owned && this.collection.equipped[slot] === item.id ? 'Wearing' : RARITIES[item.rarity].label;
+        btn.append(icon, name, rarity);
+
+        if (owned) {
+          btn.addEventListener('click', () => {
+            this.toggleAccessory(item.id);
+            this.renderWardrobe();
+          });
+        } else {
+          btn.disabled = true;
+        }
+        grid.appendChild(btn);
+      }
+      this.wardrobeSlots.append(title, grid);
+    }
   }
 
   setupLighting() {
@@ -228,6 +389,27 @@ class Game {
     this.btnNewGame = document.getElementById('btn-new-game');
     this.btnNewGame.addEventListener('click', () => this.startNewGame());
 
+    // Treasure & wardrobe
+    this.btnDig = document.getElementById('btn-dig');
+    this.treasurePopup = document.getElementById('treasure-popup');
+    this.treasureCard = document.getElementById('treasure-card');
+    this.treasureIcon = document.getElementById('treasure-icon');
+    this.treasureName = document.getElementById('treasure-name');
+    this.treasureRarity = document.getElementById('treasure-rarity');
+    document.getElementById('btn-treasure-wear').addEventListener('click', () => this.hideTreasurePopup(true));
+    document.getElementById('btn-treasure-close').addEventListener('click', () => this.hideTreasurePopup(false));
+
+    this.wardrobe = document.getElementById('wardrobe');
+    this.wardrobeSlots = document.getElementById('wardrobe-slots');
+    this.wardrobeProgress = document.getElementById('wardrobe-progress');
+    this.wardrobeCount = document.getElementById('wardrobe-count');
+    document.getElementById('btn-wardrobe').addEventListener('click', () => this.openWardrobe());
+    document.getElementById('btn-wardrobe-close').addEventListener('click', () => this.closeWardrobe());
+    // Tapping the dimmed background closes the wardrobe too
+    this.wardrobe.addEventListener('click', (e) => {
+      if (e.target === this.wardrobe) this.closeWardrobe();
+    });
+
     // Difficulty buttons
     document.querySelectorAll('.diff-btn').forEach((btn) => {
       btn.addEventListener('pointerdown', (e) => {
@@ -246,11 +428,7 @@ class Game {
 
   hideDeathScreen() {
     this.deathScreen.style.display = 'none';
-    // Drop any actions pressed while the death screen was up
-    this.input.isPounceRequested = false;
-    this.input.isSwipeRequested = false;
-    this.input.isEatRequested = false;
-    this.input.isScentRequested = false;
+    this.clearActionRequests();
   }
 
   setDeathButtonsDisabled(disabled) {
@@ -431,6 +609,12 @@ class Game {
       this.input.isEatRequested = false;
     }
 
+    // Dig up buried treasure (the carcass takes priority when both are in reach)
+    const treasure = nearestCarcass ? null : this.nearTreasure;
+    this.setStyle(this.btnDig, 'display', treasure ? 'flex' : 'none');
+    if (treasure && this.input.isDigRequested) this.digTreasure(treasure);
+    this.input.isDigRequested = false;
+
     // Pounce input request
     if (this.input.isPounceRequested) {
       this.input.isPounceRequested = false;
@@ -508,8 +692,8 @@ class Game {
     const delta = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
 
-    // World is frozen while the death screen is up
-    if (this.player.isDowned) {
+    // World is frozen while the death screen or a menu is up
+    if (this.player.isDowned || this.isPaused) {
       this.renderer.render(this.scene, this.camera);
       return;
     }
@@ -540,6 +724,9 @@ class Game {
       this.rimLight.target.position.copy(this.player.position);
       this.rimLight.target.updateMatrixWorld();
     }
+
+    // 3b. Buried treasure glimmer & proximity
+    this.nearTreasure = this.treasures.update(delta, this.player.position);
 
     // 4. Update Prey AI
     this.preyManager.update(delta, this.player);

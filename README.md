@@ -63,8 +63,14 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 
 ---
 
+### ✨ Hidden Treasure & Accessories
+- **Treasure:** Six accessories are always buried around the mountain at the foot of boulders and fir trees. Each one is a small snow mound with a gem poking out and a faint glimmer that twinkles every few seconds. Rarer finds glimmer in their own colour and can be spotted from further away (Common yellow, Rare blue, Epic purple, Legendary orange). A soft chime plays when you get close.
+- **Digging:** Walk up and press `E` (or the ✨ **Dig** button) to paw it out of the snow. You always get an accessory you don't own yet, and a replacement treasure is buried somewhere else 45 seconds later.
+- **Wardrobe:** The 🎒 **Wardrobe** button under the difficulty toggle shows everything you've found (and silhouettes of what's still out there). Tap an item to wear it or take it off. One item per slot: Head, Face, Neck, Tail.
+- **12 accessories so far** (`src/accessories.js`): flower crown, party hat, gold crown, ice crystal crown, royal snow tiara, aviators, heart shades, ski goggles, cozy red scarf, bell collar, diamond collar, tail bow. Each is built from simple shapes in code and attached to a bone of the leopard's skeleton, so it moves with every animation. Tuning numbers (how many treasures, respawn time, rarity odds, glimmer range) are at the top of `src/treasure.js` and `src/accessories.js`.
+
 ### 💾 Saving
-Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position and difficulty are restored on the next launch. **New game** under the difficulty toggle wipes the save. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
+Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position and difficulty are restored on the next launch. **New game** under the difficulty toggle resets the leopard; accessories you've found are kept. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
 
 ## 📱 Building for Android
 

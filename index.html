@@ -65,7 +65,10 @@
         </div>
 
         <button class="privacy-btn" id="btn-ad-privacy" style="display: none;">Ad privacy</button>
-        <button class="privacy-btn" id="btn-new-game">New game</button>
+        <div class="menu-row">
+          <button class="menu-btn" id="btn-wardrobe" title="Wear the accessories you've found">🎒 Wardrobe <span id="wardrobe-count">0/0</span></button>
+          <button class="privacy-btn" id="btn-new-game">New game</button>
+        </div>
       </div>
 
       <!-- Active Hunting Quest -->
@@ -98,7 +101,7 @@
 
       <!-- Controls helper hint for desktop / mobile -->
       <div class="controls-hint">
-        WASD: Move | Shift: Sprint | C: Stalk | Space: Pounce | Q: Swipe | V: Scent | E: Eat
+        WASD: Move | Shift: Sprint | C: Stalk | Space: Pounce | Q: Swipe | V: Scent | E: Eat / Dig
       </div>
 
       <!-- Wildcraft Mobile Action Cluster -->
@@ -132,6 +135,11 @@
           🍖
           <span class="btn-label">Eat</span>
         </button>
+
+        <button class="action-btn" id="btn-dig" title="Dig up buried treasure">
+          ✨
+          <span class="btn-label">Dig</span>
+        </button>
       </div>
     </footer>
   </div>
@@ -148,6 +156,33 @@
       <small>Full health &amp; stamina</small>
     </button>
     <button class="death-btn" id="btn-respawn">🏕️ Respawn at camp</button>
+  </div>
+
+  <!-- Treasure Found -->
+  <div id="treasure-popup" class="ui-overlay">
+    <div class="ui-card treasure-card" id="treasure-card">
+      <div class="treasure-title">✨ You found something! ✨</div>
+      <div class="treasure-icon" id="treasure-icon">👑</div>
+      <div class="treasure-name" id="treasure-name">Gold Crown</div>
+      <div class="treasure-rarity" id="treasure-rarity">Rare</div>
+      <div class="ui-buttons">
+        <button class="death-btn death-btn-revive" id="btn-treasure-wear">Wear it</button>
+        <button class="death-btn" id="btn-treasure-close">Keep hunting</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wardrobe -->
+  <div id="wardrobe" class="ui-overlay">
+    <div class="ui-card wardrobe-card">
+      <div class="wardrobe-header">
+        <h2>🎒 Wardrobe</h2>
+        <span class="wardrobe-progress" id="wardrobe-progress">0 / 0 found</span>
+        <button class="wardrobe-close" id="btn-wardrobe-close" aria-label="Close">✕</button>
+      </div>
+      <p class="wardrobe-hint">Treasure is buried by rocks and trees. Look for a glimmer in the snow!</p>
+      <div id="wardrobe-slots"></div>
+    </div>
   </div>
 
   <!-- Level Up Splash Notification -->

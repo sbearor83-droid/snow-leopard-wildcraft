@@ -255,6 +255,36 @@ class SoundManager {
     });
   }
 
+  // Short sine notes with soft decay; used for the treasure sounds
+  playChimeNotes(notes, step, volume, length) {
+    if (!this.isReady()) return;
+    const now = this.ctx.currentTime;
+    notes.forEach((freq, idx) => {
+      const t = now + idx * step;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(volume, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + length);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + length + 0.05);
+    });
+  }
+
+  // Faint twinkle when the leopard first gets close to hidden treasure
+  playTreasureNear() {
+    this.playChimeNotes([1567.98, 2093.0], 0.09, 0.05, 0.5);
+  }
+
+  // Sparkling arpeggio when treasure is dug up
+  playTreasureFound() {
+    this.playChimeNotes([783.99, 987.77, 1174.66, 1567.98, 1975.53], 0.07, 0.12, 0.6);
+  }
+
   startAmbientWind() {
     if (!this.ctx || this.windNode) return;
     try {

@@ -11,7 +11,7 @@ export class MountainEnvironment {
     this.scene = scene;
     this.worldSize = worldSize;
     this.halfSize = worldSize / 2;
-    this.obstacles = []; // Circles ({ x, z, radius }) used for collision
+    this.obstacles = []; // Circles ({ x, z, radius, kind: 'rock' | 'tree' }) used for collision
     this.mistPlanes = [];
     this.rng = makeRng(90210);
     this.time = 0;
@@ -418,7 +418,7 @@ vec3 snowHash3(vec2 p) {
         dummy.scale.set(sx, sy, sz);
         dummy.updateMatrix();
         inst.setMatrixAt(i, dummy.matrix);
-        this.obstacles.push({ x, z, radius: Math.max(sx, sz) * 0.78 });
+        this.obstacles.push({ x, z, radius: Math.max(sx, sz) * 0.78, kind: 'rock' });
       }
       inst.instanceMatrix.needsUpdate = true;
       this.scene.add(inst);
@@ -745,7 +745,7 @@ vec3 snowHash3(vec2 p) {
       dummy.updateMatrix();
       inst.setMatrixAt(inst.count, dummy.matrix);
       inst.count++;
-      this.obstacles.push({ x: pl.x, z: pl.z, radius: 0.55 * pl.s });
+      this.obstacles.push({ x: pl.x, z: pl.z, radius: 0.55 * pl.s, kind: 'tree' });
     });
     meshes.forEach((inst) => {
       inst.instanceMatrix.needsUpdate = true;

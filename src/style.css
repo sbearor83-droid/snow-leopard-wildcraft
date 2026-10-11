@@ -505,6 +505,229 @@ html, body {
   pointer-events: auto;
 }
 
+/* Wardrobe button row */
+.menu-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.menu-btn {
+  background: linear-gradient(135deg, rgba(126, 34, 206, 0.85), rgba(88, 28, 135, 0.85));
+  border: 1px solid #d8b4fe;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.menu-btn span {
+  font-weight: 600;
+  opacity: 0.8;
+  margin-left: 2px;
+}
+
+/* Dig button shares the Eat button's spot (they never show together) */
+#btn-eat, #btn-dig {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+#btn-dig {
+  display: none;
+  background: radial-gradient(circle, #a855f7, #6b21a8);
+  border-color: #e9d5ff;
+  animation: pulse-dig 1s infinite alternate;
+}
+
+@keyframes pulse-dig {
+  from { box-shadow: 0 0 8px rgba(168, 85, 247, 0.4); transform: scale(1); }
+  to { box-shadow: 0 0 22px rgba(216, 180, 254, 0.95); transform: scale(1.08); }
+}
+
+/* Shared full-screen overlay + card (treasure popup, wardrobe) */
+.ui-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 15, 25, 0.6);
+  pointer-events: auto;
+}
+
+.ui-card {
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 18px 22px;
+  color: #f1f5f9;
+  text-align: center;
+  max-width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+.ui-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ui-buttons .death-btn {
+  min-width: 150px;
+}
+
+/* Treasure popup */
+.treasure-card {
+  --rarity: #cbd5e1;
+  --rarity-soft: #cbd5e199;
+  border-color: var(--rarity);
+  box-shadow: 0 0 40px var(--rarity-soft);
+  animation: pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.treasure-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #e2e8f0;
+}
+
+.treasure-icon {
+  font-size: 64px;
+  line-height: 1.2;
+  margin: 6px 0 2px;
+}
+
+.treasure-name {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.treasure-rarity {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--rarity);
+}
+
+/* Wardrobe */
+.wardrobe-card {
+  width: min(560px, 100%);
+  text-align: left;
+}
+
+.wardrobe-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wardrobe-header h2 {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.wardrobe-progress {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c4b5fd;
+  flex: 1;
+}
+
+.wardrobe-close {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.wardrobe-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 4px 0 8px;
+}
+
+.wardrobe-slot-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #94a3b8;
+  margin: 10px 0 6px;
+}
+
+.wardrobe-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.wardrobe-item {
+  --rarity: #cbd5e1;
+  --rarity-soft: #cbd5e199;
+  --rarity-dim: #cbd5e140;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  border: 2px solid var(--rarity-soft);
+  background: rgba(30, 41, 59, 0.9);
+  color: #f1f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+
+.wardrobe-item .item-icon {
+  font-size: 28px;
+}
+
+.wardrobe-item .item-rarity {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--rarity);
+}
+
+.wardrobe-item.equipped {
+  background: var(--rarity-dim);
+  border-color: var(--rarity);
+  box-shadow: 0 0 12px var(--rarity-soft);
+}
+
+.wardrobe-item.locked {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.wardrobe-item.locked .item-icon {
+  filter: grayscale(1) brightness(0.2);
+}
+
 /* Death Screen */
 #death-screen {
   display: none;
@@ -617,4 +840,6 @@ html, body {
   .action-cluster { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(2, 48px); gap: 8px; }
   .action-btn { font-size: 18px; }
   .btn-attack, .btn-swipe { font-size: 20px; }
+  .ui-card { padding: 12px 16px; }
+  .treasure-icon { font-size: 44px; }
 }

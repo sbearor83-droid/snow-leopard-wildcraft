@@ -83,3 +83,46 @@ export function clearSave() {
     console.warn('Could not clear save:', e);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Accessory collection
+//
+// Kept under its own key so "New game" resets the leopard but not the
+// accessories the player has found (or, later, bought).
+// ---------------------------------------------------------------------------
+const COLLECTION_KEY = 'snowLeopardWorld.collection';
+const COLLECTION_VERSION = 1;
+
+// `validIds` filters out items that no longer exist in the catalog
+export function readCollection(validIds) {
+  const empty = { owned: new Set(), equipped: {} };
+  let data;
+  try {
+    const raw = localStorage.getItem(COLLECTION_KEY);
+    if (!raw) return empty;
+    data = JSON.parse(raw);
+  } catch (e) {
+    console.warn('Collection could not be read:', e);
+    return empty;
+  }
+  if (!data || data.version !== COLLECTION_VERSION || !Array.isArray(data.owned)) return empty;
+
+  const owned = new Set(data.owned.filter((id) => validIds.has(id)));
+  const equipped = {};
+  for (const [slot, id] of Object.entries(data.equipped || {})) {
+    if (owned.has(id)) equipped[slot] = id;
+  }
+  return { owned, equipped };
+}
+
+export function writeCollection(collection) {
+  try {
+    localStorage.setItem(COLLECTION_KEY, JSON.stringify({
+      version: COLLECTION_VERSION,
+      owned: [...collection.owned],
+      equipped: collection.equipped
+    }));
+  } catch (e) {
+    console.warn('Collection save failed:', e);
+  }
+}
