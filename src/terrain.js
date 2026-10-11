@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { smooth, fbm3, noise2, fbm2, tileFbm2, tileNoise2, makeRng, heightToNormalTexture } from './procgen.js';
 import { isMobileDevice } from './utils.js';
 
@@ -447,74 +447,254 @@ vec3 snowHash3(vec2 p) {
   }
 
   // ------------------------------------------------------------------ trees
-  // Snow-laden Himalayan fir: tapered trunk + 7 irregular branch whorls with snow on the
-  // upper faces, baked into a single vertex-coloured geometry.
+  // Texture atlas for the firs: side-view needle sprig (top-left), top-view sprig with snow
+  // (top-right) and bark (bottom half). Sprigs are alpha-cut branch cards.
+  createTreeAtlas() {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const rng = makeRng(2024);
+    ctx.clearRect(0, 0, size, size);
+
+    const needleColor = () => {
+      const g = 62 + rng() * 48;
+      return `rgb(${Math.round(g * 0.42)}, ${Math.round(g)}, ${Math.round(g * 0.55)})`;
+    };
+    // draws one twig with needles; (x0,y0)->(x1,y1); snowTop paints snow along the upper side
+    const twig = (x0, y0, x1, y1, len, snowTop, snowAmount) => {
+      const dx = x1 - x0, dy = y1 - y0;
+      const L = Math.hypot(dx, dy);
+      const ux = dx / L, uy = dy / L;
+      const px = -uy, py = ux; // perpendicular
+      ctx.strokeStyle = '#3a2a18';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.lineWidth = 1.5;
+      const n = Math.max(4, Math.floor(L / 2.8));
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n;
+        const bx = x0 + dx * t, by = y0 + dy * t;
+        const taper = 1 - t * 0.55;
+        for (const side of [-1, 1]) {
+          const nl = len * taper * (0.7 + rng() * 0.5);
+          const sw = 0.35; // needles sweep towards the tip
+          const nx = px * side * (1 - sw) + ux * sw, ny = py * side * (1 - sw) + uy * sw;
+          const nn = Math.hypot(nx, ny);
+          ctx.strokeStyle = needleColor();
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + (nx / nn) * nl, by + (ny / nn) * nl); ctx.stroke();
+        }
+      }
+      if (snowAmount > 0) {
+        // snow sitting on the upper side of the twig
+        for (let i = 0; i < n * 1.4; i++) {
+          if (rng() > snowAmount) continue;
+          const t = rng();
+          const bx = x0 + dx * t, by = y0 + dy * t;
+          const up = snowTop ? -1 : (rng() < 0.5 ? -1 : 1);
+          const r = 2.2 + rng() * 3.2 * (1 - t * 0.4);
+          const g = ctx.createRadialGradient(bx, by + up * r * 0.9, 0, bx, by + up * r * 0.9, r * 1.6);
+          g.addColorStop(0, 'rgba(248,250,253,0.98)');
+          g.addColorStop(0.6, 'rgba(236,242,248,0.9)');
+          g.addColorStop(1, 'rgba(225,235,245,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(bx, by + up * r * 0.9, r * 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    };
+
+    // --- side-view sprig (0..255 x 0..255): stem from left (trunk) to right (tip), drooping
+    {
+      const x0 = 6, y0 = 118, x1 = 250, y1 = 150;
+      const steps = 11;
+      for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1);
+        const bx = x0 + (x1 - x0) * t, by = y0 + (y1 - y0) * t * t;
+        const tl = (46 - t * 28) * (0.85 + rng() * 0.3);
+        const ang = 0.9 + rng() * 0.25;
+        // twig pairs above and below the stem, both swept towards the tip
+        twig(bx, by, bx + Math.cos(ang * 0.55) * tl, by - Math.sin(ang * 0.55) * tl, 10, true, 0.4);
+        twig(bx, by, bx + Math.cos(ang * 0.6) * tl, by + Math.sin(ang * 0.6) * tl, 10, true, 0.08);
+      }
+      // main stem with a snow ridge on top
+      ctx.strokeStyle = '#4a3620'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo((x0 + x1) * 0.5, y0 - 6, x1, y1); ctx.stroke();
+      for (let i = 0; i < 26; i++) {
+        const t = rng();
+        const bx = x0 + (x1 - x0) * t, by = y0 + (y1 - y0) * t * t - 5 - rng() * 4;
+        const r = 3 + rng() * 5 * (1 - t * 0.5);
+        const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+        g.addColorStop(0, 'rgba(250,252,255,1)'); g.addColorStop(1, 'rgba(235,242,250,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // --- top-view sprig (256..511 x 0..255): stem left to right, twigs both sides, snow all over
+    {
+      const x0 = 262, y0 = 128, x1 = 506, y1 = 128;
+      const steps = 11;
+      for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1);
+        const bx = x0 + (x1 - x0) * t;
+        const tl = (50 - t * 30) * (0.85 + rng() * 0.3);
+        const ang = 0.95 + rng() * 0.2;
+        twig(bx, y0, bx + Math.cos(ang) * tl, y0 - Math.sin(ang) * tl, 10, false, 0.5);
+        twig(bx, y0, bx + Math.cos(ang) * tl, y0 + Math.sin(ang) * tl, 10, false, 0.5);
+      }
+      ctx.strokeStyle = '#4a3620'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      for (let i = 0; i < 40; i++) {
+        const t = rng();
+        const bx = x0 + (x1 - x0) * t, by = y0 + (rng() - 0.5) * 36 * (1 - t * 0.5);
+        const r = 3 + rng() * 6 * (1 - t * 0.5);
+        const g = ctx.createRadialGradient(bx, by, 0, bx, by, r);
+        g.addColorStop(0, 'rgba(250,252,255,1)'); g.addColorStop(1, 'rgba(235,242,250,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // --- bark (0..511 x 256..511): opaque, vertical fissures
+    {
+      const img = ctx.getImageData(0, 256, size, 256);
+      const d = img.data;
+      for (let y = 0; y < 256; y++) {
+        for (let x = 0; x < size; x++) {
+          const u = x / size, v = y / 256;
+          const fiss = tileFbm2(u, v * 0.25, 18, 3, 5);
+          const grain = tileNoise2(u, v, 90, 6);
+          let l = 112 + (fiss - 0.5) * 80 + (grain - 0.5) * 24;
+          l = Math.max(50, Math.min(175, l));
+          const i = (y * size + x) * 4;
+          d[i] = l * 0.92; d[i + 1] = l * 0.74; d[i + 2] = l * 0.56; d[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 256);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  }
+
+  // Snow-laden Himalayan fir built from branch cards: a bark trunk plus whorls of drooping
+  // sprigs (a vertical side card and a horizontal top card each), shortening towards the leader.
   buildFirGeometry(seed) {
-    const parts = [];
-    const bark = new THREE.Color(0x3b2a1c);
-    const barkLight = new THREE.Color(0x5a4330);
-    const needleDark = new THREE.Color(0x0f2218);
-    const needle = new THREE.Color(0x1c3826);
-    const needleLight = new THREE.Color(0x2f5234);
-    const snow = new THREE.Color(0xf6f9fc);
-    const snowShade = new THREE.Color(0xd9e4ef);
+    const rng = makeRng(Math.floor(seed * 1000));
+    const positions = [], normals = [], uvs = [], colors = [];
     const c = new THREE.Color();
 
-    const trunkH = 9.5;
-    const trunk = new THREE.CylinderGeometry(0.16, 0.5, trunkH, 9, 4);
-    trunk.translate(0, trunkH * 0.5, 0);
-    {
-      const p = trunk.attributes.position;
-      const cols = new Float32Array(p.count * 3);
-      for (let i = 0; i < p.count; i++) {
-        const a = Math.atan2(p.getZ(i), p.getX(i));
-        c.copy(bark).lerp(barkLight, noise2(a * 2 + seed, p.getY(i) * 1.5) * 0.8);
-        cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+    // --- trunk: tapered polygon with bark UVs (bottom half of the atlas)
+    const trunkH = 10.5;
+    const segs = 9;
+    const rings = 6;
+    const trunkRing = (k) => {
+      const t = k / (rings - 1);
+      return { y: t * trunkH, r: 0.46 * Math.pow(1 - t, 0.9) + 0.045 };
+    };
+    for (let k = 0; k < rings - 1; k++) {
+      const a = trunkRing(k), b = trunkRing(k + 1);
+      for (let j = 0; j < segs; j++) {
+        const a0 = (j / segs) * Math.PI * 2, a1 = ((j + 1) / segs) * Math.PI * 2;
+        const quad = [
+          [Math.cos(a0) * a.r, a.y, Math.sin(a0) * a.r, j / segs, 0.5 + (k / (rings - 1)) * 0.5],
+          [Math.cos(a1) * a.r, a.y, Math.sin(a1) * a.r, (j + 1) / segs, 0.5 + (k / (rings - 1)) * 0.5],
+          [Math.cos(a1) * b.r, b.y, Math.sin(a1) * b.r, (j + 1) / segs, 0.5 + ((k + 1) / (rings - 1)) * 0.5],
+          [Math.cos(a0) * b.r, b.y, Math.sin(a0) * b.r, j / segs, 0.5 + ((k + 1) / (rings - 1)) * 0.5]
+        ];
+        const n0 = [Math.cos(a0), 0.1, Math.sin(a0)], n1 = [Math.cos(a1), 0.1, Math.sin(a1)];
+        const tri = (p, n) => { positions.push(p[0], p[1], p[2]); normals.push(n[0], n[1], n[2]); uvs.push(p[3], 1 - p[4]); colors.push(1, 1, 1); };
+        tri(quad[0], n0); tri(quad[1], n1); tri(quad[2], n1);
+        tri(quad[0], n0); tri(quad[2], n1); tri(quad[3], n0);
       }
-      trunk.setAttribute('color', new THREE.BufferAttribute(cols, 3));
     }
-    parts.push(trunk);
 
-    const tiers = 7;
-    for (let t = 0; t < tiers; t++) {
-      const f = t / (tiers - 1); // 0 bottom, 1 top
-      const radius = 2.9 * (1 - f * 0.86) + 0.25;
-      const height = 2.2 * (1 - f * 0.45);
-      const baseY = 1.6 + f * (trunkH - 2.4);
-      const cone = new THREE.ConeGeometry(radius, height, 18, 3, false);
-      cone.translate(0, height * 0.5 + baseY, 0);
-      const p = cone.attributes.position;
-      const cols = new Float32Array(p.count * 3);
-      for (let i = 0; i < p.count; i++) {
-        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-        const rr = Math.sqrt(x * x + z * z);
-        const a = Math.atan2(z, x);
-        const rel = rr / Math.max(radius, 0.001); // 0 at the tip, 1 at the rim
-        // ragged branch tips that droop at the rim
-        const jag = 0.78 + noise2(a * 3.2 + seed * 3 + t, t * 1.7) * 0.5;
-        const nx = x * (1 + (jag - 1) * rel), nz = z * (1 + (jag - 1) * rel);
-        const droop = rel * rel * height * 0.28;
-        p.setXYZ(i, nx, y - droop, nz);
-        // snow on the upper face near the tip, needles below; broken up by noise
-        const sn = noise2(a * 2.5 + seed, t * 3.1 + rel * 2);
-        const snowAmt = Math.max(0, Math.min(1, (0.7 - rel + (sn - 0.5) * 0.4) * 3.2));
-        c.copy(needle).lerp(needleLight, noise2(a * 4 + seed, rel * 5) * 0.7).lerp(needleDark, rel * 0.35);
-        if (y < baseY + 0.01) c.copy(needleDark); // underside disc
-        else c.lerp(sn > 0.4 ? snow : snowShade, snowAmt);
-        cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+    // --- branch cards
+    // Pushes a bent 3-column strip (two quads) given corner rows; both windings so it is lit
+    // as a front face from either side with an upward-leaning normal.
+    const strip = (rows, uvRegion, nrm, tint) => {
+      const [u0, v0, u1, v1] = uvRegion;
+      const rowUv = (i) => u0 + (u1 - u0) * (i / 2);
+      const push = (p, uu, vv) => { positions.push(p[0], p[1], p[2]); normals.push(nrm[0], nrm[1], nrm[2]); uvs.push(uu, vv); colors.push(tint.r, tint.g, tint.b); };
+      for (let i = 0; i < 2; i++) {
+        const A = rows[0][i], B = rows[0][i + 1], C = rows[1][i + 1], D = rows[1][i];
+        const ua = rowUv(i), ub = rowUv(i + 1);
+        // front
+        push(A, ua, 1 - v0); push(B, ub, 1 - v0); push(C, ub, 1 - v1);
+        push(A, ua, 1 - v0); push(C, ub, 1 - v1); push(D, ua, 1 - v1);
+        // back
+        push(A, ua, 1 - v0); push(C, ub, 1 - v1); push(B, ub, 1 - v0);
+        push(A, ua, 1 - v0); push(D, ua, 1 - v1); push(C, ub, 1 - v1);
       }
-      cone.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-      cone.computeVertexNormals();
-      parts.push(cone);
+    };
+    const SIDE = [0.012, 0.0, 0.49, 0.5];
+    const TOP = [0.512, 0.0, 0.99, 0.5];
+
+    const baseY = 1.4, topY = trunkH - 0.6;
+    const whorlStep = 0.52;
+    const perWhorl = IS_MOBILE ? 4 : 6;
+    for (let y = baseY; y < topY; y += whorlStep) {
+      const f = (y - baseY) / (topY - baseY);
+      const L = 3.0 * Math.pow(1 - f, 0.75) + 0.35;
+      const count = f > 0.85 ? 3 : perWhorl;
+      const az0 = rng() * Math.PI * 2;
+      for (let b = 0; b < count; b++) {
+        const az = az0 + (b / count) * Math.PI * 2 + (rng() - 0.5) * 0.6;
+        const len = L * (0.8 + rng() * 0.4);
+        const dx = Math.cos(az), dz = Math.sin(az);
+        // pitch: lower branches droop, upper reach up; the tip droops under snow
+        const pitch = (-0.22 + f * 0.42) + (rng() - 0.5) * 0.12;
+        const r0 = trunkRing(y / trunkH * (rings - 1)).r * 0.6;
+        const p0 = [dx * r0, y, dz * r0];
+        const p1 = [dx * (r0 + len * 0.5), y + len * 0.5 * pitch, dz * (r0 + len * 0.5)];
+        const p2 = [dx * (r0 + len), y + len * pitch - len * 0.14, dz * (r0 + len)];
+        const half = len * 0.26;
+        const tint = c.setRGB(0.85 + rng() * 0.3, 0.85 + rng() * 0.3, 0.85 + rng() * 0.3);
+        // side card: vertical strip along the branch
+        const up = [0, 1, 0];
+        strip([
+          [[p0[0], p0[1] + half, p0[2]], [p1[0], p1[1] + half * 0.9, p1[2]], [p2[0], p2[1] + half * 0.7, p2[2]]],
+          [[p0[0], p0[1] - half, p0[2]], [p1[0], p1[1] - half * 0.9, p1[2]], [p2[0], p2[1] - half * 0.7, p2[2]]]
+        ], SIDE, [dx * 0.3 - dz * 0.0, 0.95, dz * 0.3], tint);
+        // tilted card (desktop only) so the branch keeps volume when seen edge-on
+        if (!IS_MOBILE) {
+          const tilt = (b % 2 ? 1 : -1) * 0.6;
+          const tx = -dz * Math.sin(tilt) * half, ty = Math.cos(tilt) * half, tz = dx * Math.sin(tilt) * half;
+          strip([
+            [[p0[0] + tx, p0[1] + ty, p0[2] + tz], [p1[0] + tx * 0.9, p1[1] + ty * 0.9, p1[2] + tz * 0.9], [p2[0] + tx * 0.7, p2[1] + ty * 0.7, p2[2] + tz * 0.7]],
+            [[p0[0] - tx, p0[1] - ty, p0[2] - tz], [p1[0] - tx * 0.9, p1[1] - ty * 0.9, p1[2] - tz * 0.9], [p2[0] - tx * 0.7, p2[1] - ty * 0.7, p2[2] - tz * 0.7]]
+          ], SIDE, [dx * 0.3, 0.95, dz * 0.3], tint);
+        }
+        // top card: horizontal strip across the branch
+        const px = -dz * half, pz = dx * half;
+        strip([
+          [[p0[0] + px, p0[1], p0[2] + pz], [p1[0] + px * 0.95, p1[1], p1[2] + pz * 0.95], [p2[0] + px * 0.7, p2[1], p2[2] + pz * 0.7]],
+          [[p0[0] - px, p0[1], p0[2] - pz], [p1[0] - px * 0.95, p1[1], p1[2] - pz * 0.95], [p2[0] - px * 0.7, p2[1], p2[2] - pz * 0.7]]
+        ], TOP, up, tint);
+      }
     }
-    trunk.computeVertexNormals();
-    const merged = mergeGeometries(parts.map((g) => g.toNonIndexed()), false);
-    parts.forEach((g) => g.dispose());
-    return merged;
+    // leader: a few short upright sprigs at the very top
+    for (let b = 0; b < 3; b++) {
+      const az = (b / 3) * Math.PI * 2 + rng();
+      const dx = Math.cos(az), dz = Math.sin(az);
+      const y0 = topY - 0.1;
+      strip([
+        [[0, y0 + 0.25, 0], [dx * 0.3, y0 + 0.75, dz * 0.3], [dx * 0.45, y0 + 1.1, dz * 0.45]],
+        [[0, y0 - 0.25, 0], [dx * 0.3, y0 + 0.2, dz * 0.3], [dx * 0.45, y0 + 0.5, dz * 0.45]]
+      ], SIDE, [dx * 0.4, 0.9, dz * 0.4], c.setRGB(0.95, 0.95, 0.95));
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    return geo;
   }
 
   createTrees() {
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.0 });
+    const atlas = this.createTreeAtlas();
+    const mat = new THREE.MeshStandardMaterial({ map: atlas, alphaTest: 0.45, vertexColors: true, roughness: 0.9, metalness: 0.0 });
+    // alpha-cut shadows need a depth material that knows about the atlas
+    const depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: atlas, alphaTest: 0.45 });
     const variants = [this.buildFirGeometry(1.1), this.buildFirGeometry(5.7), this.buildFirGeometry(9.3)];
     const rng = makeRng(777);
 
@@ -543,6 +723,7 @@ vec3 snowHash3(vec2 p) {
       const inst = new THREE.InstancedMesh(geo, mat, perVariant);
       inst.castShadow = true;
       inst.receiveShadow = true;
+      inst.customDepthMaterial = depthMat;
       inst.count = 0;
       return inst;
     });
@@ -564,7 +745,7 @@ vec3 snowHash3(vec2 p) {
       dummy.updateMatrix();
       inst.setMatrixAt(inst.count, dummy.matrix);
       inst.count++;
-      this.obstacles.push({ x: pl.x, z: pl.z, radius: 0.7 * pl.s });
+      this.obstacles.push({ x: pl.x, z: pl.z, radius: 0.55 * pl.s });
     });
     meshes.forEach((inst) => {
       inst.instanceMatrix.needsUpdate = true;
