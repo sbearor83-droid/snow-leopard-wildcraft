@@ -1,87 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { smooth, fbm3, noise2, fbm2, tileFbm2, tileNoise2, makeRng, heightToNormalTexture } from './procgen.js';
 
 const IS_MOBILE = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
-
-// ---------------------------------------------------------------------------
-// Deterministic noise helpers (hash-based value noise) shared by every generator
-// ---------------------------------------------------------------------------
-function hash3(x, y, z) {
-  let h = (x * 374761393 + y * 668265263 + z * 2147483647) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-function smooth(t) { return t * t * (3 - 2 * t); }
-function noise3(x, y, z) {
-  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
-  const fx = smooth(x - ix), fy = smooth(y - iy), fz = smooth(z - iz);
-  const l = (a, b, t) => a + (b - a) * t;
-  return l(
-    l(l(hash3(ix, iy, iz), hash3(ix + 1, iy, iz), fx), l(hash3(ix, iy + 1, iz), hash3(ix + 1, iy + 1, iz), fx), fy),
-    l(l(hash3(ix, iy, iz + 1), hash3(ix + 1, iy, iz + 1), fx), l(hash3(ix, iy + 1, iz + 1), hash3(ix + 1, iy + 1, iz + 1), fx), fy),
-    fz
-  );
-}
-function fbm3(x, y, z, octaves = 4) {
-  let v = 0, amp = 0.5, tot = 0, f = 1;
-  for (let o = 0; o < octaves; o++) {
-    v += amp * noise3(x * f, y * f, z * f);
-    tot += amp; amp *= 0.5; f *= 2.03;
-  }
-  return v / tot;
-}
-function noise2(x, y) { return noise3(x, y, 7.31); }
-function fbm2(x, y, octaves = 4) { return fbm3(x, y, 3.17, octaves); }
-// Seamlessly tileable fbm over the unit square (blend of four shifted copies)
-function tileFbm2(u, v, f, octaves = 3, seed = 0) {
-  return fbm2(u * f + seed, v * f, octaves) * (1 - u) * (1 - v) + fbm2((u - 1) * f + seed, v * f, octaves) * u * (1 - v) +
-         fbm2(u * f + seed, (v - 1) * f, octaves) * (1 - u) * v + fbm2((u - 1) * f + seed, (v - 1) * f, octaves) * u * v;
-}
-function tileNoise2(u, v, f, seed = 0) {
-  return noise2(u * f + seed, v * f) * (1 - u) * (1 - v) + noise2((u - 1) * f + seed, v * f) * u * (1 - v) +
-         noise2(u * f + seed, (v - 1) * f) * (1 - u) * v + noise2((u - 1) * f + seed, (v - 1) * f) * u * v;
-}
-
-// Seeded RNG for repeatable scatter layouts
-function makeRng(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6d2b79f5) >>> 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// Builds a tangent-space normal map texture from a height callback over a tileable canvas
-function heightToNormalTexture(size, heightFn, strength = 2.0) {
-  const h = new Float32Array(size * size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) h[y * size + x] = heightFn(x / size, y / size);
-  }
-  const data = new Uint8Array(size * size * 4);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const xl = h[y * size + ((x - 1 + size) % size)], xr = h[y * size + ((x + 1) % size)];
-      const yu = h[((y - 1 + size) % size) * size + x], yd = h[((y + 1) % size) * size + x];
-      let nx = -(xr - xl) * strength, ny = -(yd - yu) * strength, nz = 1.0;
-      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-      nx /= len; ny /= len; nz /= len;
-      const i = (y * size + x) * 4;
-      data[i] = (nx * 0.5 + 0.5) * 255;
-      data[i + 1] = (ny * 0.5 + 0.5) * 255;
-      data[i + 2] = (nz * 0.5 + 0.5) * 255;
-      data[i + 3] = 255;
-    }
-  }
-  const tex = new THREE.DataTexture(data, size, size);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.needsUpdate = true;
-  return tex;
-}
 
 // Procedural Himalayan Mountain Terrain & Environment
 export class MountainEnvironment {

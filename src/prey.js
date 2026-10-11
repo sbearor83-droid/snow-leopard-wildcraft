@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { sounds } from './audio.js';
 import { lerpAngle } from './utils.js';
+import { buildTube, smoothPath, makeFurTextures, fbm3 } from './procgen.js';
 
 // Carcasses that are never fully eaten rot away after this many seconds
 const CARCASS_LIFETIME = 90;
@@ -9,6 +10,7 @@ const EATEN_DISSOLVE_TIME = 6;
 
 // One model per prey type is built once and cloned; clones share geometry and materials
 const MODEL_CACHE = {};
+const FUR_MATERIALS = {};
 
 // Scratch vectors reused every frame to avoid per-frame allocations
 const _toPlayer = new THREE.Vector3();
@@ -164,6 +166,7 @@ export class PreyAnimal {
     this.mesh = MODEL_CACHE[type].clone();
     this.headNode = this.mesh.getObjectByName('head');
     this.legMeshes = this.mesh.children.filter((c) => c.name === 'leg');
+    this.kneeNodes = this.legMeshes.map((leg) => leg.getObjectByName('knee'));
     this.mesh.position.copy(this.position);
     this.scene.add(this.mesh);
 
@@ -213,13 +216,13 @@ export class PreyAnimal {
     const sprite = new THREE.Sprite(mat);
     if (this.isBoss) {
       sprite.scale.set(2.4, 2.4, 2.4);
-      sprite.position.y = 3.8;
+      sprite.position.y = 4.6;
     } else if (this.type === 'ibex') {
       sprite.scale.set(1.6, 1.6, 1.6);
-      sprite.position.y = 2.6;
+      sprite.position.y = 3.2;
     } else {
-      sprite.scale.set(1.4, 1.4, 1.4);
-      sprite.position.y = 1.5;
+      sprite.scale.set(1.0, 1.0, 1.0);
+      sprite.position.y = 1.4;
     }
     sprite.visible = false;
     return sprite;
@@ -253,308 +256,365 @@ export class PreyAnimal {
     this.alertSprite.visible = true;
   }
 
-  buildYakModel() {
-    const group = new THREE.Group();
-    // Shaggy dark Tibetan Yak materials
-    const shaggyMat = new THREE.MeshStandardMaterial({ color: 0x27201c, roughness: 0.95 });
-    const humpMat = new THREE.MeshStandardMaterial({ color: 0x3d322b, roughness: 0.9 });
-    const skirtMat = new THREE.MeshStandardMaterial({ color: 0x1f1916, roughness: 0.95 });
-    const hornMat = new THREE.MeshStandardMaterial({ color: 0xdcd8d0, roughness: 0.45, metalness: 0.1 });
-    const hornTipMat = new THREE.MeshStandardMaterial({ color: 0x221f1d, roughness: 0.6 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x161311, roughness: 0.7 });
+  // ------------------------------------------------------------------ model builders
+  // All prey are lofted from smooth tube paths (one continuous surface from rump to nose) with
+  // vertex-coloured coats, a fur-grain map + normal map, jointed legs (hip + knee) and a
+  // 'head' node at the neck base so the AI can raise and lower the head.
 
-    // Massive Barrel-Chested Torso
-    const bodyGeo = new THREE.CylinderGeometry(1.15, 1.25, 3.5, 12);
-    bodyGeo.rotateX(Math.PI / 2);
-    bodyGeo.scale(1.05, 1.1, 1.0);
-    const body = new THREE.Mesh(bodyGeo, shaggyMat);
-    body.position.y = 2.4;
-    body.castShadow = true;
-    group.add(body);
-
-    // Iconic Prominent Shoulder Hump
-    const humpGeo = new THREE.SphereGeometry(1.2, 10, 8);
-    humpGeo.scale(0.88, 1.05, 1.2);
-    const hump = new THREE.Mesh(humpGeo, humpMat);
-    hump.position.set(0, 3.2, 0.7);
-    hump.castShadow = true;
-    group.add(hump);
-
-    // Hanging Shaggy Wool Skirt / Fringe on flanks & belly
-    const skirtGeo = new THREE.CylinderGeometry(1.28, 1.35, 3.4, 12);
-    skirtGeo.rotateX(Math.PI / 2);
-    skirtGeo.scale(1.02, 0.75, 1.0);
-    const skirt = new THREE.Mesh(skirtGeo, skirtMat);
-    skirt.position.set(0, 1.6, 0);
-    skirt.castShadow = true;
-    group.add(skirt);
-
-    // Heavy Neck & Head
-    const headNode = new THREE.Group();
-    headNode.name = 'head';
-    headNode.position.set(0, 2.7, 1.9);
-    group.add(headNode);
-
-    const neckGeo = new THREE.CylinderGeometry(0.75, 0.95, 1.5, 10);
-    neckGeo.scale(0.95, 1.1, 1.0);
-    const neck = new THREE.Mesh(neckGeo, shaggyMat);
-    neck.position.set(0, 0.2, 0.4);
-    neck.rotation.x = 0.45;
-    neck.castShadow = true;
-    headNode.add(neck);
-
-    const headGeo = new THREE.SphereGeometry(0.75, 10, 10);
-    headGeo.scale(0.9, 0.85, 1.15);
-    const headMesh = new THREE.Mesh(headGeo, shaggyMat);
-    headMesh.position.set(0, 0.5, 1.1);
-    headMesh.castShadow = true;
-    headNode.add(headMesh);
-
-    // Broad Curved Snout & Nostrils
-    const snoutGeo = new THREE.CylinderGeometry(0.48, 0.58, 0.9, 10);
-    snoutGeo.rotateX(Math.PI / 2);
-    const snout = new THREE.Mesh(snoutGeo, darkMat);
-    snout.position.set(0, 0.25, 1.8);
-    headNode.add(snout);
-
-    // Majestic Sweeping Curved Yak Horns
-    for (let side = -1; side <= 1; side += 2) {
-      const h1 = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.32, 0.9, 7), hornMat);
-      h1.position.set(side * 0.9, 0.85, 1.0);
-      h1.rotation.z = side * -1.2;
-      h1.rotation.y = side * 0.2;
-      h1.castShadow = true;
-      headNode.add(h1);
-
-      const h2 = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.9, 7), hornMat);
-      h2.position.set(side * 1.5, 1.25, 1.2);
-      h2.rotation.z = side * -0.5;
-      h2.rotation.x = 0.5;
-      h2.castShadow = true;
-      headNode.add(h2);
-
-      const h3 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.7, 6), hornTipMat);
-      h3.position.set(side * 1.7, 1.9, 1.4);
-      h3.rotation.z = side * 0.3;
-      h3.rotation.x = 0.8;
-      h3.castShadow = true;
-      headNode.add(h3);
+  furMaterial(kind) {
+    if (!FUR_MATERIALS[kind]) {
+      const cfg = {
+        ibex: { shag: 1.2, contrast: 0.22, seed: 1, normal: 0.55, rough: 0.9 },
+        hare: { shag: 0.7, contrast: 0.12, seed: 2, normal: 0.35, rough: 0.92 },
+        yak: { shag: 2.6, contrast: 0.4, seed: 3, normal: 0.9, rough: 0.95 }
+      }[kind];
+      const { map, normalMap } = makeFurTextures(256, cfg.shag, cfg.contrast, cfg.seed);
+      FUR_MATERIALS[kind] = new THREE.MeshStandardMaterial({
+        map,
+        normalMap,
+        normalScale: new THREE.Vector2(cfg.normal, cfg.normal),
+        vertexColors: true,
+        roughness: cfg.rough,
+        metalness: 0.0
+      });
     }
-
-    // Shaggy Bushy Tail
-    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.15, 1.8, 6), skirtMat);
-    tail.position.set(0, 1.7, -1.9);
-    tail.rotation.x = 0.3;
-    group.add(tail);
-
-    // Thick Sturdy Pillar Legs with heavy split bovine hooves
-    const legPositions = [
-      [0.8, 1.8, 1.2],
-      [-0.8, 1.8, 1.2],
-      [0.75, 1.8, -1.2],
-      [-0.75, 1.8, -1.2]
-    ];
-    legPositions.forEach(([lx, ly, lz]) => {
-      const legRoot = new THREE.Group();
-      legRoot.position.set(lx, ly, lz);
-
-      const legGeo = new THREE.CylinderGeometry(0.30, 0.22, 1.6, 12, 3);
-      legGeo.computeVertexNormals();
-      const leg = new THREE.Mesh(legGeo, shaggyMat);
-      leg.position.y = -0.8;
-      leg.castShadow = true;
-      legRoot.add(leg);
-
-      // Heavy split bovine hoof
-      const hoofGeo = new THREE.CylinderGeometry(0.24, 0.28, 0.35, 10, 2);
-      hoofGeo.scale(1.1, 1.0, 1.25);
-      hoofGeo.computeVertexNormals();
-      const hoof = new THREE.Mesh(hoofGeo, darkMat);
-      hoof.position.y = -1.6;
-      hoof.castShadow = true;
-      legRoot.add(hoof);
-
-      legRoot.name = 'leg';
-      group.add(legRoot);
-    });
-
-    return group;
+    return FUR_MATERIALS[kind];
   }
 
+  // Jointed leg: hip group ('leg') -> upper tube -> knee group ('knee') -> lower tube -> hoof
+  buildLeg(x, hipY, z, cfg, mat, hoofMat) {
+    const leg = new THREE.Group();
+    leg.name = 'leg';
+    leg.position.set(x, hipY, z);
+    const kneeDrop = hipY - cfg.kneeY;
+    const col = cfg.colorFn || (() => new THREE.Color(0xffffff));
+
+    const upper = buildTube(smoothPath([
+      { x: 0, y: 0.12, z: 0, rx: cfg.upperR * 1.15, ry: cfg.upperR * 1.25 },
+      { x: 0, y: -kneeDrop * 0.5, z: cfg.kneeZ * 0.5, rx: cfg.upperR * 0.95, ry: cfg.upperR },
+      { x: 0, y: -kneeDrop, z: cfg.kneeZ, rx: cfg.lowerR * 1.15, ry: cfg.lowerR * 1.2 },
+      { x: 0, y: -kneeDrop - cfg.lowerR * 0.9, z: cfg.kneeZ, rx: cfg.lowerR * 0.9, ry: cfg.lowerR * 0.9 }
+    ], 3), 10, (i, t, up, side, px, py, pz) => col(t * 0.5, up, side, px, py + hipY, pz), { vScale: 1.2 });
+    const upperMesh = new THREE.Mesh(upper, mat);
+    upperMesh.castShadow = true;
+    leg.add(upperMesh);
+
+    const knee = new THREE.Group();
+    knee.name = 'knee';
+    knee.position.set(0, -kneeDrop, cfg.kneeZ);
+    leg.add(knee);
+
+    const lowerLen = cfg.kneeY - cfg.hoofH;
+    const lower = buildTube(smoothPath([
+      { x: 0, y: cfg.lowerR * 0.6, z: 0, rx: cfg.lowerR * 1.05, ry: cfg.lowerR * 1.1 },
+      { x: 0, y: -lowerLen * 0.5, z: -cfg.kneeZ * 0.45, rx: cfg.lowerR * 0.85, ry: cfg.lowerR * 0.9 },
+      { x: 0, y: -lowerLen, z: -cfg.kneeZ, rx: cfg.hoofR * 1.05, ry: cfg.hoofR * 1.05 },
+      { x: 0, y: -lowerLen - 0.02, z: -cfg.kneeZ, rx: cfg.hoofR * 0.9, ry: cfg.hoofR * 0.9 }
+    ], 3), 10, (i, t, up, side, px, py, pz) => col(0.5 + t * 0.5, up, side, px, py + cfg.kneeY, pz), { vScale: 1.2 });
+    const lowerMesh = new THREE.Mesh(lower, mat);
+    lowerMesh.castShadow = true;
+    knee.add(lowerMesh);
+
+    if (cfg.hoofH > 0) {
+      const hoof = new THREE.Mesh(new THREE.CylinderGeometry(cfg.hoofR * 0.95, cfg.hoofR * 1.1, cfg.hoofH, 10), hoofMat);
+      hoof.position.set(0, -lowerLen - cfg.hoofH * 0.5, -cfg.kneeZ + cfg.hoofR * 0.15);
+      hoof.castShadow = true;
+      knee.add(hoof);
+    }
+    return leg;
+  }
+
+  addEye(parent, x, y, z, r, mat) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mat);
+    eye.position.set(x, y, z);
+    parent.add(eye);
+  }
+
+  // Himalayan ibex: stocky grey-brown winter coat, dark dorsal stripe and legs, pale belly and
+  // rump, dark beard, long knobbed scimitar horns sweeping back over the shoulders.
   buildIbexModel() {
     const group = new THREE.Group();
-    const coatMat = new THREE.MeshStandardMaterial({ color: 0x8a7765, roughness: 0.85 }); // Grey-brown mountain pelt
-    const underMat = new THREE.MeshStandardMaterial({ color: 0xd6cbbd, roughness: 0.85 });
-    const hornMat = new THREE.MeshStandardMaterial({ color: 0x3d352e, roughness: 0.6 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x221f1d, roughness: 0.7 });
+    const mat = this.furMaterial('ibex');
+    const hornMat = new THREE.MeshStandardMaterial({ color: 0x5b5048, roughness: 0.55, metalness: 0.05 });
+    const hoofMat = new THREE.MeshStandardMaterial({ color: 0x2b2420, roughness: 0.6 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.25 });
 
-    // Torso (agile sculpted mountain body)
-    const bodyGeo = new THREE.CylinderGeometry(0.48, 0.58, 1.7, 12, 4);
-    bodyGeo.rotateX(Math.PI / 2);
-    bodyGeo.scale(1.0, 1.08, 1.0);
-    bodyGeo.computeVertexNormals();
-    const body = new THREE.Mesh(bodyGeo, coatMat);
-    body.position.y = 1.35;
-    body.castShadow = true;
-    group.add(body);
+    const dorsal = new THREE.Color(0x6f5f4d), flank = new THREE.Color(0x9c8d77), belly = new THREE.Color(0xd9d0c1);
+    const stripe = new THREE.Color(0x2f2620), rumpPatch = new THREE.Color(0xe6dfd3), c = new THREE.Color();
+    const bodyColor = (i, t, up, side, px, py, pz) => {
+      const n = fbm3(px * 3 + 2, py * 3, pz * 3, 2);
+      c.copy(flank).lerp(dorsal, Math.max(0, up) * 0.9).lerp(belly, Math.max(0, -up - 0.15) * 1.2);
+      if (up > 0.86 && t > 0.08 && t < 0.78) c.lerp(stripe, (up - 0.86) * 6); // dorsal stripe
+      if (t < 0.1 && up > -0.2) c.lerp(rumpPatch, (0.1 - t) * 7 * (0.5 + up * 0.5)); // pale rump
+      if (t > 0.8) c.lerp(dorsal, (t - 0.8) * 2.5); // darker neck
+      return c.offsetHSL(0, 0, (n - 0.5) * 0.08);
+    };
 
-    const bellyGeo = new THREE.CylinderGeometry(0.42, 0.48, 1.5, 12, 3);
-    bellyGeo.rotateX(Math.PI / 2);
-    bellyGeo.scale(0.9, 0.55, 1.0);
-    bellyGeo.computeVertexNormals();
-    const belly = new THREE.Mesh(bellyGeo, underMat);
-    belly.position.set(0, 0.95, 0);
-    group.add(belly);
+    // Body: tail root -> rump -> belly -> chest -> shoulders -> neck base
+    const body = buildTube(smoothPath([
+      { x: 0, y: 1.42, z: -1.02, rx: 0.16, ry: 0.18 },
+      { x: 0, y: 1.4, z: -0.82, rx: 0.42, ry: 0.5 },
+      { x: 0, y: 1.32, z: -0.3, rx: 0.5, ry: 0.58 },
+      { x: 0, y: 1.3, z: 0.25, rx: 0.5, ry: 0.6 },
+      { x: 0, y: 1.42, z: 0.62, rx: 0.42, ry: 0.52 },
+      { x: 0, y: 1.6, z: 0.92, rx: 0.3, ry: 0.36 },
+      { x: 0, y: 1.72, z: 1.02, rx: 0.24, ry: 0.28 }
+    ], 4), 18, bodyColor, { uScale: 3, vScale: 3 });
+    const bodyMesh = new THREE.Mesh(body, mat);
+    bodyMesh.castShadow = true;
+    group.add(bodyMesh);
 
-    // Neck & Head
+    // Neck + head pivoting at the neck base
     const headNode = new THREE.Group();
     headNode.name = 'head';
-    headNode.position.set(0, 1.65, 0.85);
+    headNode.position.set(0, 1.62, 0.95);
     group.add(headNode);
-
-    const neckGeo = new THREE.CylinderGeometry(0.32, 0.45, 0.85, 10, 3);
-    neckGeo.scale(0.85, 1.1, 1.0);
-    neckGeo.computeVertexNormals();
-    const neck = new THREE.Mesh(neckGeo, coatMat);
-    neck.position.set(0, 0.3, 0.2);
-    neck.rotation.x = 0.5;
-    neck.castShadow = true;
-    headNode.add(neck);
-
-    const headGeo = new THREE.SphereGeometry(0.38, 12, 10);
-    headGeo.scale(0.85, 0.8, 1.1);
-    headGeo.computeVertexNormals();
-    const headMesh = new THREE.Mesh(headGeo, coatMat);
-    headMesh.position.set(0, 0.6, 0.45);
+    const headCol = (i, t, up, side, px, py, pz) => {
+      c.copy(dorsal).lerp(flank, Math.max(0, -up) * 0.5);
+      if (t > 0.72) c.lerp(belly, (t - 0.72) * 2.2 * (0.6 - up * 0.4)); // pale muzzle
+      if (t > 0.45 && t < 0.7 && up < -0.3) c.lerp(stripe, 0.6); // dark chin / beard shadow
+      return c;
+    };
+    const head = buildTube(smoothPath([
+      { x: 0, y: -0.1, z: -0.08, rx: 0.3, ry: 0.34 },
+      { x: 0, y: 0.25, z: 0.12, rx: 0.24, ry: 0.27 },
+      { x: 0, y: 0.56, z: 0.3, rx: 0.21, ry: 0.23 },
+      { x: 0, y: 0.68, z: 0.5, rx: 0.2, ry: 0.2 },
+      { x: 0, y: 0.6, z: 0.8, rx: 0.14, ry: 0.14 },
+      { x: 0, y: 0.52, z: 1.0, rx: 0.09, ry: 0.08 },
+      { x: 0, y: 0.5, z: 1.06, rx: 0.04, ry: 0.035 }
+    ], 4), 16, headCol, { uScale: 2, vScale: 2 });
+    const headMesh = new THREE.Mesh(head, mat);
     headMesh.castShadow = true;
     headNode.add(headMesh);
 
-    // Muzzle
-    const muzzleGeo = new THREE.CylinderGeometry(0.2, 0.28, 0.5, 10, 2);
-    muzzleGeo.rotateX(Math.PI / 2);
-    muzzleGeo.computeVertexNormals();
-    const muzzle = new THREE.Mesh(muzzleGeo, underMat);
-    muzzle.position.set(0, 0.45, 0.85);
-    headNode.add(muzzle);
-
     // Beard
-    const beard = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 6), darkMat);
-    beard.position.set(0, 0.2, 0.75);
-    beard.rotation.x = -0.3;
+    const beard = new THREE.Mesh(buildTube(smoothPath([
+      { x: 0, y: 0.42, z: 0.86, rx: 0.07, ry: 0.05 },
+      { x: 0, y: 0.26, z: 0.84, rx: 0.06, ry: 0.05 },
+      { x: 0, y: 0.1, z: 0.8, rx: 0.02, ry: 0.02 }
+    ], 3), 8, () => stripe), mat);
     headNode.add(beard);
 
-    // Majestic Curved Ibex Horns (scimitar ridges)
+    // Horns: knobbed scimitars curving back over the neck
     for (let side = -1; side <= 1; side += 2) {
-      for (let s = 0; s < 4; s++) {
-        const segGeo = new THREE.CylinderGeometry(0.12 - s * 0.025, 0.15 - s * 0.025, 0.4, 8);
-        segGeo.computeVertexNormals();
-        const seg = new THREE.Mesh(segGeo, hornMat);
-        seg.position.set(side * (0.2 + s * 0.06), 0.85 + s * 0.25, 0.35 - s * 0.18);
-        seg.rotation.x = -0.5 - s * 0.25;
-        seg.rotation.z = side * 0.2;
-        seg.castShadow = true;
-        headNode.add(seg);
-      }
+      const ctrl = [
+        { x: side * 0.08, y: 0.8, z: 0.42, rx: 0.085, ry: 0.1 },
+        { x: side * 0.14, y: 1.12, z: 0.3, rx: 0.075, ry: 0.09 },
+        { x: side * 0.22, y: 1.4, z: 0.02, rx: 0.06, ry: 0.07 },
+        { x: side * 0.3, y: 1.5, z: -0.32, rx: 0.042, ry: 0.05 },
+        { x: side * 0.36, y: 1.42, z: -0.62, rx: 0.022, ry: 0.025 },
+        { x: side * 0.4, y: 1.3, z: -0.8, rx: 0.006, ry: 0.006 }
+      ];
+      const path = smoothPath(ctrl, 5);
+      // knobbed ridges along the front edge
+      path.forEach((pt, i) => { const k = 1 + (i % 2 === 0 ? 0.14 : -0.08) * (1 - i / path.length); pt.rx *= k; pt.ry *= k; });
+      const horn = new THREE.Mesh(buildTube(path, 10), hornMat);
+      horn.castShadow = true;
+      headNode.add(horn);
     }
 
-    // Agile digitigrade mountain caprid legs with cloven hooves
-    const legPositions = [
-      [0.4, 1.1, 0.6],
-      [-0.4, 1.1, 0.6],
-      [0.38, 1.1, -0.65],
-      [-0.38, 1.1, -0.65]
-    ];
-    legPositions.forEach(([lx, ly, lz]) => {
-      const legRoot = new THREE.Group();
-      legRoot.position.set(lx, ly, lz);
+    // Ears and eyes
+    for (let side = -1; side <= 1; side += 2) {
+      const ear = new THREE.Mesh(buildTube(smoothPath([
+        { x: side * 0.14, y: 0.66, z: 0.34, rx: 0.05, ry: 0.035 },
+        { x: side * 0.26, y: 0.72, z: 0.26, rx: 0.07, ry: 0.03 },
+        { x: side * 0.4, y: 0.76, z: 0.18, rx: 0.02, ry: 0.015 }
+      ], 3), 8, () => flank), mat);
+      headNode.add(ear);
+      this.addEye(headNode, side * 0.15, 0.66, 0.66, 0.035, eyeMat);
+    }
 
-      const legGeo = new THREE.CylinderGeometry(0.14, 0.09, 1.0, 10, 3);
-      legGeo.computeVertexNormals();
-      const leg = new THREE.Mesh(legGeo, coatMat);
-      leg.position.y = -0.5;
-      leg.castShadow = true;
-      legRoot.add(leg);
+    // Short tail
+    const tail = new THREE.Mesh(buildTube(smoothPath([
+      { x: 0, y: 1.45, z: -1.0, rx: 0.06, ry: 0.06 },
+      { x: 0, y: 1.5, z: -1.2, rx: 0.07, ry: 0.07 },
+      { x: 0, y: 1.42, z: -1.32, rx: 0.02, ry: 0.02 }
+    ], 3), 8, () => stripe), mat);
+    group.add(tail);
 
-      const hoofGeo = new THREE.CylinderGeometry(0.10, 0.13, 0.22, 8, 2);
-      hoofGeo.scale(1.15, 1.0, 1.3);
-      hoofGeo.computeVertexNormals();
-      const hoof = new THREE.Mesh(hoofGeo, darkMat);
-      hoof.position.y = -1.0;
-      hoof.castShadow = true;
-      legRoot.add(hoof);
-
-      legRoot.name = 'leg';
-      group.add(legRoot);
-    });
-
+    // Legs: dark fronts with pale inner faces
+    const legCol = (t, up, side, px, py, pz) => {
+      c.copy(dorsal).lerp(stripe, 0.55 + t * 0.3);
+      if (px * side < 0 || side > 0.4) c.lerp(belly, 0.45); // inner / rear face paler
+      return c;
+    };
+    const frontCfg = { upperR: 0.16, lowerR: 0.09, kneeY: 0.66, kneeZ: 0.03, hoofR: 0.085, hoofH: 0.12, colorFn: legCol };
+    const backCfg = { upperR: 0.22, lowerR: 0.09, kneeY: 0.72, kneeZ: -0.16, hoofR: 0.085, hoofH: 0.12, colorFn: legCol };
+    group.add(this.buildLeg(0.3, 1.3, 0.5, frontCfg, mat, hoofMat));
+    group.add(this.buildLeg(-0.3, 1.3, 0.5, frontCfg, mat, hoofMat));
+    group.add(this.buildLeg(0.3, 1.35, -0.72, backCfg, mat, hoofMat));
+    group.add(this.buildLeg(-0.3, 1.35, -0.72, backCfg, mat, hoofMat));
     return group;
   }
 
+  // Snow hare: compact arched white body, long black-tipped ears, powerful hind legs, pink nose
   buildHareModel() {
     const group = new THREE.Group();
-    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf5f8fc, roughness: 0.88 });
-    const earTipMat = new THREE.MeshStandardMaterial({ color: 0x1f1f22, roughness: 0.8 });
-    const pinkMat = new THREE.MeshStandardMaterial({ color: 0xe0969d, roughness: 0.6 });
+    const mat = this.furMaterial('hare');
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.25 });
+    const noseMat = new THREE.MeshStandardMaterial({ color: 0xd9929a, roughness: 0.6 });
+    const white = new THREE.Color(0xf4f5f7), greyBack = new THREE.Color(0xd7dce2), earTip = new THREE.Color(0x1d1d20), c = new THREE.Color();
+    const coat = (i, t, up, side, px, py, pz) => c.copy(white).lerp(greyBack, Math.max(0, up) * 0.6 * (1 - Math.abs(t - 0.5)));
 
-    // Round plump body with smooth normals
-    const bodyGeo = new THREE.SphereGeometry(0.55, 12, 10);
-    bodyGeo.scale(0.8, 0.85, 1.15);
-    bodyGeo.computeVertexNormals();
-    const body = new THREE.Mesh(bodyGeo, whiteMat);
-    body.position.y = 0.55;
-    body.castShadow = true;
-    group.add(body);
+    const body = buildTube(smoothPath([
+      { x: 0, y: 0.4, z: -0.46, rx: 0.1, ry: 0.1 },
+      { x: 0, y: 0.5, z: -0.32, rx: 0.27, ry: 0.3 },
+      { x: 0, y: 0.54, z: -0.02, rx: 0.26, ry: 0.28 },
+      { x: 0, y: 0.46, z: 0.26, rx: 0.2, ry: 0.22 },
+      { x: 0, y: 0.48, z: 0.4, rx: 0.15, ry: 0.16 }
+    ], 4), 16, coat, { uScale: 2, vScale: 2 });
+    const bodyMesh = new THREE.Mesh(body, mat);
+    bodyMesh.castShadow = true;
+    group.add(bodyMesh);
 
-    // Head
     const headNode = new THREE.Group();
     headNode.name = 'head';
-    headNode.position.set(0, 0.75, 0.45);
+    headNode.position.set(0, 0.5, 0.36);
     group.add(headNode);
+    const head = buildTube(smoothPath([
+      { x: 0, y: -0.02, z: -0.06, rx: 0.13, ry: 0.13 },
+      { x: 0, y: 0.1, z: 0.1, rx: 0.15, ry: 0.15 },
+      { x: 0, y: 0.1, z: 0.26, rx: 0.11, ry: 0.11 },
+      { x: 0, y: 0.06, z: 0.36, rx: 0.05, ry: 0.045 },
+      { x: 0, y: 0.05, z: 0.39, rx: 0.02, ry: 0.02 }
+    ], 4), 14, coat, { uScale: 2, vScale: 1.5 });
+    headNode.add(new THREE.Mesh(head, mat));
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), noseMat);
+    nose.position.set(0, 0.06, 0.38);
+    headNode.add(nose);
 
-    const headGeo = new THREE.SphereGeometry(0.35, 12, 10);
-    headGeo.computeVertexNormals();
-    const headMesh = new THREE.Mesh(headGeo, whiteMat);
+    for (let side = -1; side <= 1; side += 2) {
+      const ear = new THREE.Mesh(buildTube(smoothPath([
+        { x: side * 0.05, y: 0.18, z: 0.02, rx: 0.045, ry: 0.035 },
+        { x: side * 0.08, y: 0.42, z: -0.06, rx: 0.06, ry: 0.022 },
+        { x: side * 0.11, y: 0.64, z: -0.14, rx: 0.045, ry: 0.018 },
+        { x: side * 0.12, y: 0.72, z: -0.17, rx: 0.012, ry: 0.01 }
+      ], 4), 10, (i, t) => (t > 0.82 ? earTip : white)), mat);
+      ear.castShadow = true;
+      headNode.add(ear);
+      this.addEye(headNode, side * 0.1, 0.14, 0.2, 0.028, eyeMat);
+    }
+
+    const tail = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), mat);
+    tail.position.set(0, 0.5, -0.47);
+    group.add(tail);
+
+    const legCol = () => white;
+    const frontCfg = { upperR: 0.05, lowerR: 0.035, kneeY: 0.2, kneeZ: 0.02, hoofR: 0.035, hoofH: 0, colorFn: legCol };
+    const backCfg = { upperR: 0.11, lowerR: 0.045, kneeY: 0.22, kneeZ: -0.1, hoofR: 0.045, hoofH: 0, colorFn: legCol };
+    group.add(this.buildLeg(0.13, 0.4, 0.22, frontCfg, mat, null));
+    group.add(this.buildLeg(-0.13, 0.4, 0.22, frontCfg, mat, null));
+    group.add(this.buildLeg(0.17, 0.46, -0.24, backCfg, mat, null));
+    group.add(this.buildLeg(-0.17, 0.46, -0.24, backCfg, mat, null));
+    return group;
+  }
+
+  // Titan crag yak: massive humped body under a hanging shaggy skirt, low heavy head with
+  // wide sweeping horns, bushy tail
+  buildYakModel() {
+    const group = new THREE.Group();
+    const mat = this.furMaterial('yak');
+    const hornMat = new THREE.MeshStandardMaterial({ color: 0xcdc3b2, roughness: 0.5, metalness: 0.05 });
+    const hoofMat = new THREE.MeshStandardMaterial({ color: 0x1a1512, roughness: 0.6 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x120f0d, roughness: 0.3 });
+    const dark = new THREE.Color(0x2e221a), mid = new THREE.Color(0x4a3829), hump = new THREE.Color(0x7d6650), muzzle = new THREE.Color(0x9a948a), c = new THREE.Color();
+    const coat = (i, t, up, side, px, py, pz) => {
+      const n = fbm3(px * 2 + 5, py * 2, pz * 2, 2);
+      c.copy(mid).lerp(hump, Math.max(0, up) * (t > 0.5 && t < 0.9 ? 1.0 : 0.45)).lerp(dark, Math.max(0, -up) * 0.8);
+      return c.offsetHSL(0, 0, (n - 0.5) * 0.12);
+    };
+
+    // Body: deep chest, tall shoulder hump, neck dropping to a low-carried head
+    const body = buildTube(smoothPath([
+      { x: 0, y: 2.55, z: -2.2, rx: 0.4, ry: 0.5 },
+      { x: 0, y: 2.55, z: -1.6, rx: 0.92, ry: 1.05 },
+      { x: 0, y: 2.4, z: -0.5, rx: 1.0, ry: 1.2 },
+      { x: 0, y: 2.55, z: 0.6, rx: 1.0, ry: 1.25 },
+      { x: 0, y: 3.1, z: 1.25, rx: 0.85, ry: 1.12 },
+      { x: 0, y: 2.75, z: 1.95, rx: 0.68, ry: 0.8 },
+      { x: 0, y: 2.25, z: 2.35, rx: 0.55, ry: 0.6 }
+    ], 4), 20, coat, { uScale: 4, vScale: 4 });
+    const bodyMesh = new THREE.Mesh(body, mat);
+    bodyMesh.castShadow = true;
+    group.add(bodyMesh);
+
+    // Shaggy skirt hanging from the flanks with a ragged hem
+    const skirt = buildTube(smoothPath([
+      { x: 0, y: 1.95, z: -1.95, rx: 0.8, ry: 0.75 },
+      { x: 0, y: 1.9, z: -1.0, rx: 1.1, ry: 0.95 },
+      { x: 0, y: 1.85, z: 0.2, rx: 1.14, ry: 1.0 },
+      { x: 0, y: 1.95, z: 1.2, rx: 1.06, ry: 0.9 },
+      { x: 0, y: 2.1, z: 1.6, rx: 0.78, ry: 0.7 }
+    ], 3), 24, (i, t, up) => c.copy(dark).lerp(mid, Math.max(0, up) * 0.5), { uScale: 5, vScale: 4 });
+    {
+      // ragged hanging hem
+      const p = skirt.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const y = p.getY(i);
+        if (y < 1.5) {
+          const rag = fbm3(p.getX(i) * 3, 0, p.getZ(i) * 3, 2);
+          p.setY(i, y - (1.5 - y) * 0.7 * (0.3 + rag));
+        }
+      }
+      skirt.computeVertexNormals();
+    }
+    const skirtMesh = new THREE.Mesh(skirt, mat);
+    skirtMesh.castShadow = true;
+    group.add(skirtMesh);
+
+    const headNode = new THREE.Group();
+    headNode.name = 'head';
+    headNode.position.set(0, 2.45, 2.3);
+    group.add(headNode);
+    const headCol = (i, t, up) => (t > 0.78 ? c.copy(muzzle).lerp(dark, Math.max(0, up) * 0.4) : c.copy(mid).lerp(dark, 0.3 + Math.max(0, -up) * 0.4));
+    const head = buildTube(smoothPath([
+      { x: 0, y: 0.0, z: -0.15, rx: 0.48, ry: 0.52 },
+      { x: 0, y: -0.05, z: 0.3, rx: 0.5, ry: 0.54 },
+      { x: 0, y: -0.4, z: 0.75, rx: 0.42, ry: 0.42 },
+      { x: 0, y: -0.75, z: 1.1, rx: 0.33, ry: 0.3 },
+      { x: 0, y: -0.9, z: 1.32, rx: 0.24, ry: 0.2 },
+      { x: 0, y: -0.95, z: 1.4, rx: 0.1, ry: 0.08 }
+    ], 4), 16, headCol, { uScale: 3, vScale: 2 });
+    const headMesh = new THREE.Mesh(head, mat);
     headMesh.castShadow = true;
     headNode.add(headMesh);
 
-    // Tall Ears
     for (let side = -1; side <= 1; side += 2) {
-      const earGeo = new THREE.CylinderGeometry(0.07, 0.11, 0.65, 8, 2);
-      earGeo.computeVertexNormals();
-      const ear = new THREE.Mesh(earGeo, whiteMat);
-      ear.position.set(side * 0.16, 0.45, -0.05);
-      ear.rotation.z = side * -0.2;
-      ear.castShadow = true;
+      const horn = new THREE.Mesh(buildTube(smoothPath([
+        { x: side * 0.3, y: 0.3, z: 0.15, rx: 0.19, ry: 0.19 },
+        { x: side * 0.95, y: 0.35, z: 0.05, rx: 0.15, ry: 0.15 },
+        { x: side * 1.45, y: 0.6, z: 0.2, rx: 0.1, ry: 0.1 },
+        { x: side * 1.65, y: 1.1, z: 0.6, rx: 0.06, ry: 0.06 },
+        { x: side * 1.5, y: 1.45, z: 0.9, rx: 0.012, ry: 0.012 }
+      ], 5), 10), hornMat);
+      horn.castShadow = true;
+      headNode.add(horn);
+      const ear = new THREE.Mesh(buildTube(smoothPath([
+        { x: side * 0.42, y: 0.05, z: 0.25, rx: 0.08, ry: 0.06 },
+        { x: side * 0.68, y: 0.0, z: 0.2, rx: 0.1, ry: 0.05 },
+        { x: side * 0.86, y: -0.06, z: 0.16, rx: 0.03, ry: 0.02 }
+      ], 3), 8, () => dark), mat);
       headNode.add(ear);
-
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 6), earTipMat);
-      tip.position.set(side * 0.16, 0.72, -0.05);
-      tip.rotation.z = side * -0.2;
-      headNode.add(tip);
+      this.addEye(headNode, side * 0.37, -0.05, 0.62, 0.05, eyeMat);
     }
 
-    // Fluffy Pompom Tail
-    const tail = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), whiteMat);
-    tail.position.set(0, 0.55, -0.65);
+    const tail = new THREE.Mesh(buildTube(smoothPath([
+      { x: 0, y: 2.6, z: -2.25, rx: 0.12, ry: 0.12 },
+      { x: 0, y: 2.1, z: -2.5, rx: 0.22, ry: 0.22 },
+      { x: 0, y: 1.5, z: -2.62, rx: 0.3, ry: 0.3 },
+      { x: 0, y: 1.05, z: -2.6, rx: 0.1, ry: 0.1 }
+    ], 4), 10, () => dark, { uScale: 2, vScale: 2 }), mat);
+    tail.castShadow = true;
     group.add(tail);
 
-    // Smooth sculpted hare legs
-    for (let i = 0; i < 4; i++) {
-      const legRoot = new THREE.Group();
-      const isBack = i >= 2;
-      legRoot.position.set((i % 2 === 0 ? 1 : -1) * 0.28, 0.45, isBack ? -0.35 : 0.35);
-
-      const legGeo = new THREE.CylinderGeometry(0.08, 0.05, isBack ? 0.55 : 0.4, 8, 2);
-      legGeo.computeVertexNormals();
-      const leg = new THREE.Mesh(legGeo, whiteMat);
-      leg.position.y = -0.2;
-      leg.castShadow = true;
-      legRoot.add(leg);
-
-      legRoot.name = 'leg';
-      group.add(legRoot);
-    }
-
+    const legCol = () => dark;
+    const frontCfg = { upperR: 0.32, lowerR: 0.2, kneeY: 1.05, kneeZ: 0.05, hoofR: 0.22, hoofH: 0.26, colorFn: legCol };
+    const backCfg = { upperR: 0.36, lowerR: 0.2, kneeY: 1.1, kneeZ: -0.3, hoofR: 0.22, hoofH: 0.26, colorFn: legCol };
+    group.add(this.buildLeg(0.62, 2.0, 0.95, frontCfg, mat, hoofMat));
+    group.add(this.buildLeg(-0.62, 2.0, 0.95, frontCfg, mat, hoofMat));
+    group.add(this.buildLeg(0.62, 2.1, -1.35, backCfg, mat, hoofMat));
+    group.add(this.buildLeg(-0.62, 2.1, -1.35, backCfg, mat, hoofMat));
     return group;
   }
 
@@ -592,12 +652,12 @@ export class PreyAnimal {
     if (this.isBoss) {
       this.updateSprite('👑🍖', '#f59e0b');
       this.mesh.rotation.z = Math.PI / 2.2;
-      this.mesh.position.y -= 1.8;
+      this.mesh.position.y -= 1.5;
       sounds.playBossGrunt();
     } else {
       this.updateSprite('🍖', '#22c55e');
       this.mesh.rotation.z = Math.PI / 2.2;
-      this.mesh.position.y -= this.type === 'ibex' ? 0.8 : 0.35;
+      this.mesh.position.y -= this.type === 'ibex' ? 0.75 : 0.25;
     }
   }
 
@@ -806,8 +866,21 @@ export class PreyAnimal {
       this.legPhase = (this.legPhase || 0) + delta * (this.speed / strideLen) * Math.PI * 2;
       const legAmp = Math.min(0.75, 0.25 + this.speed * 0.045);
       this.legMeshes.forEach((leg, idx) => {
-        const offset = idx % 2 === 0 ? 0 : Math.PI;
-        leg.rotation.x = Math.sin(this.legPhase + offset) * legAmp;
+        // diagonal pairs move together: FL+BR, FR+BL
+        const offset = (idx === 0 || idx === 3) ? 0 : Math.PI;
+        const swing = Math.sin(this.legPhase + offset);
+        leg.rotation.x = swing * legAmp;
+        // knee folds while the leg swings forward (lifted)
+        const knee = this.kneeNodes[idx];
+        if (knee) knee.rotation.x = Math.max(0, -swing) * legAmp * 1.3 + 0.08;
+      });
+      // body bob + head nod in time with the stride
+      this.mesh.position.y = groundY + Math.abs(Math.sin(this.legPhase)) * Math.min(0.12, this.speed * 0.012);
+    } else {
+      this.legMeshes.forEach((leg, idx) => {
+        leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, 0, delta * 6);
+        const knee = this.kneeNodes[idx];
+        if (knee) knee.rotation.x = THREE.MathUtils.lerp(knee.rotation.x, 0.08, delta * 6);
       });
     }
   }
