@@ -88,14 +88,23 @@ export function clearSave() {
 // Accessory collection
 //
 // Kept under its own key so "New game" resets the leopard but not the
-// accessories the player has found (or, later, bought).
+// accessories the player has found or bought, their wallet, or daily rewards.
 // ---------------------------------------------------------------------------
 const COLLECTION_KEY = 'snowLeopardWorld.collection';
 const COLLECTION_VERSION = 1;
 
 // `validIds` filters out items that no longer exist in the catalog
 export function readCollection(validIds) {
-  const empty = { owned: new Set(), equipped: {}, foundAt: {}, milestones: [], goldPrints: true };
+  const empty = {
+    owned: new Set(),
+    equipped: {},
+    foundAt: {},
+    milestones: [],
+    goldPrints: true,
+    wallet: { pelts: 0, crystals: 0 },
+    daily: { lastLoginDay: null, streak: 0, stashDay: null, stashFound: 0 },
+    removeAds: false
+  };
   let data;
   try {
     const raw = localStorage.getItem(COLLECTION_KEY);
@@ -119,7 +128,14 @@ export function readCollection(validIds) {
   }
   const milestones = Array.isArray(data.milestones) ? data.milestones.filter(Number.isFinite) : [];
   const goldPrints = data.goldPrints !== false;
-  return { owned, equipped, foundAt, milestones, goldPrints };
+
+  const count = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+  const w = data.wallet || {};
+  const wallet = { pelts: count(w.pelts), crystals: count(w.crystals) };
+  const d = data.daily || {};
+  const day = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const daily = { lastLoginDay: day(d.lastLoginDay), streak: count(d.streak), stashDay: day(d.stashDay), stashFound: count(d.stashFound) };
+  return { owned, equipped, foundAt, milestones, goldPrints, wallet, daily, removeAds: data.removeAds === true };
 }
 
 export function writeCollection(collection) {
@@ -130,7 +146,10 @@ export function writeCollection(collection) {
       equipped: collection.equipped,
       foundAt: collection.foundAt,
       milestones: collection.milestones,
-      goldPrints: collection.goldPrints
+      goldPrints: collection.goldPrints,
+      wallet: collection.wallet,
+      daily: collection.daily,
+      removeAds: collection.removeAds
     }));
   } catch (e) {
     console.warn('Collection save failed:', e);

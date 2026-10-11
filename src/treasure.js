@@ -12,6 +12,9 @@ import { sounds } from './audio.js';
 //
 // Scent Vision reveals them: as its sonar ring sweeps over a treasure, a beam
 // of light in the rarity colour rises from it until the scent wears off.
+//
+// Daily stash: a few extra chests (gold lid instead of a gem) are buried once a
+// day with better odds. They are not replaced when dug up.
 // ---------------------------------------------------------------------------
 const ACTIVE_COUNT = 6; // treasures buried in the world at once
 const RESPAWN_DELAY = 45; // seconds before a dug-up treasure is replaced elsewhere
@@ -104,6 +107,8 @@ export class TreasureManager {
     this.moundGeo = new THREE.SphereGeometry(0.6, 14, 8);
     this.moundMat = new THREE.MeshStandardMaterial({ color: 0xf3f6fa, roughness: 0.9 });
     this.gemGeo = new THREE.OctahedronGeometry(0.16);
+    this.chestGeo = new THREE.BoxGeometry(0.42, 0.24, 0.3);
+    this.chestMat = new THREE.MeshStandardMaterial({ color: 0xf5c542, metalness: 0.6, roughness: 0.3, emissive: 0x6b4a00, emissiveIntensity: 0.5 });
     this.gemMats = {};
     for (const [key, r] of Object.entries(RARITIES)) {
       this.gemMats[key] = new THREE.MeshStandardMaterial({ color: r.hex, emissive: r.hex, emissiveIntensity: 0.55, roughness: 0.1, metalness: 0.2, flatShading: true });
@@ -115,6 +120,10 @@ export class TreasureManager {
 
     // Nearest treasure revealed by the current Scent Vision pulse: { treasure, distance } or null
     this.nearestRevealed = null;
+
+    // Daily stash chests to bury when the world starts (set by the game before the first update)
+    this.dailyToSpawn = 0;
+    this.dailyFirstIsFresh = false;
   }
 
   // Finds a free spot at the foot of a random rock or tree
@@ -137,10 +146,12 @@ export class TreasureManager {
     return null;
   }
 
-  spawn(playerPos) {
+  // options.daily: a daily stash chest; options.minRarity: reroll until at least this tier
+  spawn(playerPos, { daily = false, minRarity = 'common' } = {}) {
     const spot = this.findSpot(playerPos);
     if (!spot) return false;
-    const rarity = rollRarity();
+    let rarity = rollRarity();
+    while (RARITY_ORDER.indexOf(rarity) < RARITY_ORDER.indexOf(minRarity)) rarity = rollRarity();
     const r = RARITIES[rarity];
     const y = this.terrain.getTerrainHeight(spot.x, spot.z);
 
@@ -153,10 +164,10 @@ export class TreasureManager {
     mound.receiveShadow = true;
     group.add(mound);
 
-    // Corner of the buried item poking out of the snow
-    const gem = new THREE.Mesh(this.gemGeo, this.gemMats[rarity]);
-    gem.position.set(0.12, 0.12, 0.05);
-    gem.rotation.set(0.6, 0, 0.4);
+    // Corner of the buried item poking out of the snow (a gold chest lid for the daily stash)
+    const gem = new THREE.Mesh(daily ? this.chestGeo : this.gemGeo, daily ? this.chestMat : this.gemMats[rarity]);
+    gem.position.set(0.12, daily ? 0.1 : 0.12, 0.05);
+    gem.rotation.set(daily ? 0.35 : 0.6, 0, daily ? 0.2 : 0.4);
     group.add(gem);
 
     const sparkle = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -191,8 +202,9 @@ export class TreasureManager {
       sparkle,
       beam,
       revealed: false,
+      daily,
       rarity,
-      glimmerRange: r.glimmerRange,
+      glimmerRange: daily ? Math.max(r.glimmerRange, 55) : r.glimmerRange,
       sparkleSize: rarity === 'legendary' ? 1.9 : rarity === 'epic' ? 1.5 : 1.2,
       twinklePeriod: 2.2 + Math.random() * 1.6,
       twinkleClock: Math.random() * 3,
@@ -200,6 +212,11 @@ export class TreasureManager {
       digging: false
     });
     return true;
+  }
+
+  // Daily stash chests still buried
+  get dailyRemaining() {
+    return this.treasures.filter((t) => t.daily).length;
   }
 
   // Removes a dug-up treasure and schedules a replacement somewhere else
@@ -210,7 +227,7 @@ export class TreasureManager {
     treasure.group.removeFromParent();
     treasure.sparkle.material.dispose();
     treasure.beam.material.dispose();
-    this.respawnTimers.push(RESPAWN_DELAY);
+    if (!treasure.daily) this.respawnTimers.push(RESPAWN_DELAY);
   }
 
   // Animates every treasure and returns the nearest one within digging range (or null).
@@ -219,6 +236,8 @@ export class TreasureManager {
     if (!this.started) {
       this.started = true;
       for (let i = 0; i < ACTIVE_COUNT; i++) this.spawn(playerPos);
+      // The first chest of the day is at least Rare
+      for (let i = 0; i < this.dailyToSpawn; i++) this.spawn(playerPos, { daily: true, minRarity: i === 0 && this.dailyFirstIsFresh ? 'rare' : 'common' });
     }
 
     for (let i = this.respawnTimers.length - 1; i >= 0; i--) {
@@ -255,7 +274,7 @@ export class TreasureManager {
       t.sparkle.material.opacity = (0.18 + 0.82 * flare) * fade;
       t.sparkle.material.rotation += delta * 0.6;
       t.sparkle.scale.setScalar(t.sparkleSize * (0.45 + 0.9 * flare));
-      t.gem.rotation.y += delta * 0.8;
+      if (!t.daily) t.gem.rotation.y += delta * 0.8;
 
       if (!t.chimed && d < NEAR_CHIME_RANGE) {
         t.chimed = true;

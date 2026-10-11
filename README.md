@@ -71,8 +71,16 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 - **Collection Book:** The second tab in the Wardrobe shows overall and per-rarity progress, when you found each item, and hints (rarity and slot) for the ones you're missing. Rewards unlock automatically: 3 found = +100 XP, 6 = +250 XP, 9 = +500 XP, and finding all 12 unlocks **golden paw prints**, which can be switched on or off in the book.
 - **12 accessories so far** (`src/accessories.js`): flower crown, party hat, gold crown, ice crystal crown, royal snow tiara, aviators, heart shades, ski goggles, cozy red scarf, bell collar, diamond collar, tail bow. Each is built from simple shapes in code and attached to a bone of the leopard's skeleton, so it moves with every animation. Tuning numbers (how many treasures, respawn time, rarity odds, glimmer range) are at the top of `src/treasure.js` and `src/accessories.js`.
 
+### 🛒 Shop, Currency & Daily Rewards
+- **Currencies:** 🐾 **Pelts** are earned by playing (hare 10, ibex 20, Titan Yak 100, plus daily rewards and spare treasure). 💎 **Snow Crystals** are premium: a few are earned (day 7 of the login streak, daily stash once your collection is complete). Real-money packs will add more once billing is connected. Your balance shows on the 🛒 button under the difficulty toggle.
+- **Daily reward:** The first launch each day shows a 7-day streak (🐾 50 → 75 → 100 → 125 → 150 → 200 → 🐾 250 + 💎 10). Missing a day starts it over.
+- **Daily stash:** Each day, 3 bonus treasure chests (a gold chest lid peeking out of the snow) are buried in addition to the regular treasure. The first is always Rare or better. The compass shows how many are left, and found chests stay found if you restart.
+- **Shop:** "Today's offers" shows 4 accessories you don't own, rotating at midnight (Common 🐾150, Rare 🐾400, Epic 🐾900). "Crystal exclusives" always sells Epic (💎25) and Legendary (💎60) items. Bought items count toward the Collection Book.
+- **Real-money products** (Crystal packs, Remove Ads) are listed but show **Coming soon** until Google Play Billing is connected. Setup steps are in `src/store.js`. Nothing is granted without a real purchase.
+- Wallet, purchases and daily progress are kept when you start a New game. Tuning lives in `src/economy.js`.
+
 ### 💾 Saving
-Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position and difficulty are restored on the next launch. **New game** under the difficulty toggle resets the leopard; accessories you've found are kept. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
+Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position and difficulty are restored on the next launch. **New game** under the difficulty toggle resets the leopard; accessories, Pelts, Crystals and daily progress are kept. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
 
 ## 📱 Building for Android
 

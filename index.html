@@ -57,6 +57,7 @@
           <div class="compass-heading" id="compass-heading">NORTH</div>
           <div class="prey-radar-text" id="prey-radar-text">Tracking Scent: Bharal Herd (45m)</div>
           <div class="treasure-radar-text" id="treasure-radar-text"></div>
+          <div class="daily-stash-text" id="daily-stash-text"></div>
         </div>
 
         <div class="difficulty-toggle" id="difficulty-toggle">
@@ -68,6 +69,7 @@
         <button class="privacy-btn" id="btn-ad-privacy" style="display: none;">Ad privacy</button>
         <div class="menu-row">
           <button class="menu-btn" id="btn-wardrobe" title="Wear the accessories you've found">🎒 Wardrobe <span id="wardrobe-count">0/0</span></button>
+          <button class="menu-btn shop-btn" id="btn-shop" title="Shop">🛒 <span class="wallet-amount" id="hud-pelts">🐾 0</span> <span class="wallet-amount" id="hud-crystals">💎 0</span></button>
           <button class="privacy-btn" id="btn-new-game">New game</button>
         </div>
       </div>
@@ -171,6 +173,31 @@
         <button class="death-btn death-btn-revive" id="btn-treasure-wear">Wear it</button>
         <button class="death-btn" id="btn-treasure-close">Keep hunting</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Daily Login Reward -->
+  <div id="daily-popup" class="ui-overlay">
+    <div class="ui-card daily-card">
+      <div class="treasure-title">☀️ Daily reward</div>
+      <div class="daily-day" id="daily-day">Day 1</div>
+      <div class="daily-strip" id="daily-strip"></div>
+      <p class="daily-note" id="daily-note">Come back tomorrow to keep your streak going!</p>
+      <div class="ui-buttons">
+        <button class="death-btn death-btn-revive" id="btn-daily-claim">Claim</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shop -->
+  <div id="shop" class="ui-overlay">
+    <div class="ui-card wardrobe-card shop-card">
+      <div class="wardrobe-header">
+        <h2>🛒 Shop</h2>
+        <span class="shop-wallet" id="shop-wallet"></span>
+        <button class="wardrobe-close" id="btn-shop-close" aria-label="Close">✕</button>
+      </div>
+      <div id="shop-body"></div>
     </div>
   </div>
 

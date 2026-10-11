@@ -11,6 +11,11 @@ import { isMobileDevice } from './utils.js';
 import { AUTOSAVE_INTERVAL_MS, readSave, writeSave, clearSave, readCollection, writeCollection } from './save.js';
 import { ACCESSORIES, ACCESSORY_BY_ID, RARITIES, SLOTS, MILESTONES } from './accessories.js';
 import { TreasureManager, pickReward } from './treasure.js';
+import {
+  CURRENCY, PREY_PELTS, SPARE_TREASURE_PELTS, PRICES, STREAK_REWARDS, DAILY_STASH_COUNT, DAILY_STASH_FALLBACK,
+  dayKey, msUntilTomorrow, dailyLoginReward, dailyOffers, canAfford, formatPrice, formatReward
+} from './economy.js';
+import { BILLING_ENABLED, PRODUCTS, purchase } from './store.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -98,6 +103,7 @@ class Game {
     // Catch up on book rewards earned before milestones existed (needs the loaded XP)
     const owed = this.claimMilestones();
     if (owed.length) this.spawnFloatingText(`📖 Collection rewards: ${owed.map((m) => m.label).join(', ')}`, '#4ade80', { x: window.innerWidth * 0.5, y: 140 });
+    this.setupDaily();
     setInterval(() => this.saveGame(), AUTOSAVE_INTERVAL_MS);
     // Android can kill a backgrounded app without warning, so save the moment it's hidden
     document.addEventListener('visibilitychange', () => {
@@ -184,6 +190,7 @@ class Game {
     }
     this.applyGoldPrints();
     this.updateWardrobeCount();
+    this.updateWalletHUD();
   }
 
   hasGoldPrintsUnlocked() {
@@ -250,13 +257,18 @@ class Game {
 
   revealTreasure(treasure) {
     this.treasures.collect(treasure);
+    if (treasure.daily) {
+      this.collection.daily.stashFound += 1;
+      writeCollection(this.collection);
+    }
     const item = pickReward(treasure.rarity, this.collection.owned);
     const screenPos = this.getScreenCoords(treasure.position);
 
     if (!item) {
-      // Everything is collected: treasure still pays out XP
-      this.player.addXp(60);
-      this.spawnFloatingText('✨ Old trinket! +60 XP', '#c084fc', screenPos);
+      // Everything is collected: treasure pays out currency instead
+      const reward = treasure.daily ? DAILY_STASH_FALLBACK : { pelts: SPARE_TREASURE_PELTS };
+      this.addCurrency(reward);
+      this.spawnFloatingText(`${treasure.daily ? '🎁 Daily stash!' : '✨ Spare trinket!'} ${formatReward(reward)}`, '#fcd34d', screenPos);
       sounds.playTreasureFound();
       this.saveGame();
       return;
@@ -270,7 +282,7 @@ class Game {
     const milestones = this.claimMilestones();
     this.saveGame();
     sounds.playTreasureFound();
-    this.showTreasurePopup(item, milestones);
+    this.showTreasurePopup(item, milestones, treasure.daily ? '🎁 Daily stash! 🎁' : undefined);
   }
 
   setRarityVars(el, rarity) {
@@ -280,8 +292,9 @@ class Game {
     el.style.setProperty('--rarity-dim', `${color}40`);
   }
 
-  showTreasurePopup(item, milestones = []) {
+  showTreasurePopup(item, milestones = [], title = '✨ You found something! ✨') {
     this.lastFoundItem = item;
+    this.treasureTitle.textContent = title;
     // Collection book milestone reached with this find
     this.treasureBonus.style.display = milestones.length ? 'block' : 'none';
     this.treasureBonus.textContent = milestones
@@ -453,6 +466,175 @@ class Game {
     }
   }
 
+  // ------------------------------------------------------------------ wallet
+  addCurrency(reward) {
+    for (const cur of Object.keys(CURRENCY)) {
+      if (reward[cur]) this.collection.wallet[cur] += reward[cur];
+    }
+    writeCollection(this.collection);
+    this.updateWalletHUD();
+  }
+
+  updateWalletHUD() {
+    const w = this.collection.wallet;
+    this.setText(this.hudPelts, `🐾 ${w.pelts}`);
+    this.setText(this.hudCrystals, `💎 ${w.crystals}`);
+  }
+
+  // ------------------------------------------------------------------ daily
+  setupDaily() {
+    const today = dayKey();
+    const daily = this.collection.daily;
+    if (daily.stashDay !== today) {
+      daily.stashDay = today;
+      daily.stashFound = 0;
+      writeCollection(this.collection);
+    }
+    this.treasures.dailyToSpawn = Math.max(0, DAILY_STASH_COUNT - daily.stashFound);
+    this.treasures.dailyFirstIsFresh = daily.stashFound === 0;
+
+    this.pendingLogin = dailyLoginReward(daily, today);
+    if (this.pendingLogin) this.showDailyPopup(this.pendingLogin);
+  }
+
+  showDailyPopup(login) {
+    this.dailyDay.textContent = `Day ${login.day} of ${STREAK_REWARDS.length}`;
+    this.dailyStrip.replaceChildren();
+    STREAK_REWARDS.forEach((reward, i) => {
+      const day = i + 1;
+      const cell = this.el('div', `daily-cell${day < login.day ? ' past' : ''}${day === login.day ? ' today' : ''}`, '',
+        this.el('span', '', `Day ${day}`),
+        ...Object.entries(reward).map(([cur, amount]) => this.el('span', 'reward', `${CURRENCY[cur].icon}${amount}`)));
+      this.dailyStrip.appendChild(cell);
+    });
+    this.dailyNote.textContent = login.day === STREAK_REWARDS.length
+      ? 'Full week! Your streak starts over tomorrow.'
+      : 'Come back tomorrow to keep your streak going! Miss a day and it starts over.';
+    this.dailyPopup.style.display = 'flex';
+    this.setPaused(true);
+  }
+
+  claimDailyReward() {
+    const login = this.pendingLogin;
+    this.dailyPopup.style.display = 'none';
+    this.setPaused(false);
+    if (!login) return;
+    this.pendingLogin = null;
+    const daily = this.collection.daily;
+    daily.lastLoginDay = dayKey();
+    daily.streak = login.streak;
+    this.addCurrency(login.reward);
+    sounds.playTreasureFound();
+    this.spawnFloatingText(`☀️ Daily reward ${formatReward(login.reward)}`, '#fcd34d', { x: window.innerWidth * 0.5, y: 150 });
+  }
+
+  // ------------------------------------------------------------------ shop
+  openShop() {
+    if (this.player.isDowned) return;
+    this.shopStatus = '';
+    this.renderShop();
+    this.shop.style.display = 'flex';
+    this.setPaused(true);
+  }
+
+  closeShop() {
+    this.shop.style.display = 'none';
+    this.setPaused(false);
+  }
+
+  shopItemCard(item, prices) {
+    const card = this.el('div', 'shop-item', '',
+      this.el('span', 'item-icon', item.icon),
+      this.el('span', '', item.name),
+      this.el('span', 'item-rarity', `${RARITIES[item.rarity].label} · ${SLOTS[item.slot].label}`));
+    this.setRarityVars(card, item.rarity);
+    for (const [cur, amount] of Object.entries(prices)) {
+      const price = { [cur]: amount };
+      const btn = this.el('button', 'buy-btn', formatPrice(price));
+      btn.disabled = !canAfford(this.collection.wallet, price);
+      btn.addEventListener('click', () => this.buyAccessory(item, price));
+      card.append(btn);
+    }
+    return card;
+  }
+
+  renderShop() {
+    const w = this.collection.wallet;
+    this.shopWallet.textContent = `🐾 ${w.pelts}   💎 ${w.crystals}`;
+    const body = this.shopBody;
+    body.replaceChildren();
+    if (this.shopStatus) body.append(this.el('div', 'treasure-bonus shop-status', this.shopStatus));
+
+    // Today's rotating offers
+    const left = msUntilTomorrow();
+    const hours = Math.floor(left / 3600000);
+    const mins = Math.floor((left % 3600000) / 60000);
+    body.append(this.el('div', 'shop-section-title', '', this.el('span', '', "Today's offers"), this.el('small', '', `New offers in ${hours}h ${mins}m`)));
+    const offers = dailyOffers(this.collection.owned);
+    if (offers.length) {
+      const grid = this.el('div', 'shop-grid');
+      for (const item of offers) grid.append(this.shopItemCard(item, PRICES[item.rarity]));
+      body.append(grid);
+    } else {
+      body.append(this.el('div', 'shop-empty', 'You own every accessory! New items are coming soon.'));
+    }
+
+    // Premium: every Epic & Legendary item not owned yet, for Snow Crystals
+    const premium = ACCESSORIES.filter((a) => PRICES[a.rarity].crystals && !this.collection.owned.has(a.id) && !offers.includes(a));
+    if (premium.length) {
+      body.append(this.el('div', 'shop-section-title', '', this.el('span', '', '💎 Crystal exclusives'), this.el('small', '', 'Always available')));
+      const grid = this.el('div', 'shop-grid');
+      for (const item of premium) grid.append(this.shopItemCard(item, { crystals: PRICES[item.rarity].crystals }));
+      body.append(grid);
+    }
+
+    // Real-money products (disabled until Google Play Billing is connected)
+    body.append(this.el('div', 'shop-section-title', '', this.el('span', '', 'Snow Crystals'), this.el('small', '', BILLING_ENABLED ? '' : 'Coming soon')));
+    const grid = this.el('div', 'shop-grid');
+    for (const product of PRODUCTS) {
+      if (product.grants.removeAds && this.collection.removeAds) continue;
+      const card = this.el('div', 'shop-item', '',
+        this.el('span', 'item-icon', product.icon),
+        this.el('span', '', product.name),
+        this.el('span', 'item-rarity', product.grants.crystals ? `${product.grants.crystals} crystals` : 'No more ads'));
+      if (product.tag) card.append(this.el('span', 'tag', product.tag));
+      const btn = this.el('button', 'buy-btn', BILLING_ENABLED ? product.price : 'Coming soon');
+      btn.disabled = !BILLING_ENABLED;
+      btn.addEventListener('click', () => this.buyProduct(product));
+      card.append(btn);
+      grid.append(card);
+    }
+    body.append(grid);
+  }
+
+  buyAccessory(item, price) {
+    if (this.collection.owned.has(item.id) || !canAfford(this.collection.wallet, price)) return;
+    for (const [cur, amount] of Object.entries(price)) this.collection.wallet[cur] -= amount;
+    this.collection.owned.add(item.id);
+    this.collection.foundAt[item.id] = Date.now();
+    writeCollection(this.collection);
+    const milestones = this.claimMilestones();
+    this.updateWardrobeCount();
+    this.updateWalletHUD();
+    sounds.playTreasureFound();
+    this.shopStatus = [`✅ Bought ${item.icon} ${item.name}! Wear it from your Wardrobe.`]
+      .concat(milestones.map((m) => (m.goldPrints ? '🐾 Collection complete! Golden paw prints unlocked!' : `📖 ${m.count} owned! Collection reward: ${m.label}`)))
+      .join('\n');
+    this.renderShop();
+  }
+
+  async buyProduct(product) {
+    const grants = await purchase(product.id);
+    if (!grants) return;
+    if (grants.crystals) this.addCurrency({ crystals: grants.crystals });
+    if (grants.removeAds) {
+      this.collection.removeAds = true;
+      writeCollection(this.collection);
+    }
+    this.shopStatus = `✅ Thank you! ${product.name} added.`;
+    this.renderShop();
+  }
+
   setupLighting() {
     // Hemispherical Ambient Light (azure alpine sky + warm snow ground reflection)
     const hemiLight = new THREE.HemisphereLight(0x9ec4ea, 0xe4ebf1, 0.95);
@@ -535,6 +717,25 @@ class Game {
     this.wardrobeWear = document.getElementById('wardrobe-wear');
     this.wardrobeBook = document.getElementById('wardrobe-book');
     this.treasureBonus = document.getElementById('treasure-bonus');
+    this.treasureTitle = this.treasureCard.querySelector('.treasure-title');
+
+    // Wallet, shop & daily reward
+    this.hudPelts = document.getElementById('hud-pelts');
+    this.hudCrystals = document.getElementById('hud-crystals');
+    this.dailyStashText = document.getElementById('daily-stash-text');
+    this.shop = document.getElementById('shop');
+    this.shopBody = document.getElementById('shop-body');
+    this.shopWallet = document.getElementById('shop-wallet');
+    document.getElementById('btn-shop').addEventListener('click', () => this.openShop());
+    document.getElementById('btn-shop-close').addEventListener('click', () => this.closeShop());
+    this.shop.addEventListener('click', (e) => {
+      if (e.target === this.shop) this.closeShop();
+    });
+    this.dailyPopup = document.getElementById('daily-popup');
+    this.dailyDay = document.getElementById('daily-day');
+    this.dailyStrip = document.getElementById('daily-strip');
+    this.dailyNote = document.getElementById('daily-note');
+    document.getElementById('btn-daily-claim').addEventListener('click', () => this.claimDailyReward());
     this.treasureRadarText = document.getElementById('treasure-radar-text');
     for (const btn of this.wardrobe.querySelectorAll('.wardrobe-tab')) {
       btn.addEventListener('click', () => this.showWardrobeTab(btn.dataset.tab));
@@ -598,7 +799,7 @@ class Game {
   async respawnAtCamp() {
     this.setDeathButtonsDisabled(true);
     sounds.setSuspended(true);
-    await ads.maybeShowInterstitial();
+    if (!this.collection.removeAds) await ads.maybeShowInterstitial();
     sounds.setSuspended(false);
     this.player.respawnAtCamp();
     this.hideDeathScreen();
@@ -655,11 +856,13 @@ class Game {
 
       if (prey.isDead) {
         this.player.preyHunted += 1;
-        this.spawnFloatingText(`+${prey.xpReward} XP${prey.isBoss ? ' 👑 BOSS SLAIN!' : ''}`, '#a855f7', {
+        const pelts = PREY_PELTS[prey.type] || 0;
+        this.spawnFloatingText(`+${prey.xpReward} XP  +${pelts} 🐾${prey.isBoss ? ' 👑 BOSS SLAIN!' : ''}`, '#a855f7', {
           x: screenPos.x,
           y: screenPos.y - 30
         });
         this.player.addXp(prey.xpReward);
+        this.addCurrency({ pelts });
         this.saveGame();
       }
       return true;
@@ -809,6 +1012,11 @@ class Game {
       this.setText(this.preyRadarText, 'All nearby prey hunted');
       this.setStyle(this.preyRadarText, 'color', '#94a3b8');
     }
+
+    // Daily stash chests still buried today
+    const stashLeft = this.treasures.dailyRemaining;
+    this.setStyle(this.dailyStashText, 'display', stashLeft ? 'block' : 'none');
+    if (stashLeft) this.setText(this.dailyStashText, `🎁 Daily stash: ${stashLeft} chest${stashLeft > 1 ? 's' : ''} left`);
 
     // Treasure revealed by Scent Vision
     const revealed = this.treasures.nearestRevealed;
