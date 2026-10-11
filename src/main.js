@@ -9,7 +9,7 @@ import { sounds } from './audio.js';
 import { ads } from './ads.js';
 import { isMobileDevice } from './utils.js';
 import { AUTOSAVE_INTERVAL_MS, readSave, writeSave, clearSave, readCollection, writeCollection } from './save.js';
-import { ACCESSORIES, ACCESSORY_BY_ID, RARITIES, SLOTS } from './accessories.js';
+import { ACCESSORIES, ACCESSORY_BY_ID, RARITIES, SLOTS, MILESTONES } from './accessories.js';
 import { TreasureManager, pickReward } from './treasure.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
@@ -95,6 +95,9 @@ class Game {
     // Resume saved progress, then keep saving automatically
     this.loadCollection();
     this.loadGame();
+    // Catch up on book rewards earned before milestones existed (needs the loaded XP)
+    const owed = this.claimMilestones();
+    if (owed.length) this.spawnFloatingText(`📖 Collection rewards: ${owed.map((m) => m.label).join(', ')}`, '#4ade80', { x: window.innerWidth * 0.5, y: 140 });
     setInterval(() => this.saveGame(), AUTOSAVE_INTERVAL_MS);
     // Android can kill a backgrounded app without warning, so save the moment it's hidden
     document.addEventListener('visibilitychange', () => {
@@ -179,7 +182,34 @@ class Game {
       if (SLOTS[slot] && ACCESSORY_BY_ID[id].slot === slot) this.player.setAccessory(slot, id);
       else delete this.collection.equipped[slot];
     }
+    this.applyGoldPrints();
     this.updateWardrobeCount();
+  }
+
+  hasGoldPrintsUnlocked() {
+    return MILESTONES.some((m) => m.goldPrints && this.collection.milestones.includes(m.count));
+  }
+
+  applyGoldPrints() {
+    this.terrain.setGoldenPawPrints(this.hasGoldPrintsUnlocked() && this.collection.goldPrints);
+  }
+
+  // Grants every collection book milestone the collection has reached but not yet claimed.
+  // Returns the newly claimed milestones.
+  claimMilestones() {
+    const claimed = [];
+    for (const m of MILESTONES) {
+      if (this.collection.owned.size < m.count || this.collection.milestones.includes(m.count)) continue;
+      this.collection.milestones.push(m.count);
+      if (m.xp) this.player.addXp(m.xp);
+      claimed.push(m);
+    }
+    if (claimed.length) {
+      writeCollection(this.collection);
+      this.applyGoldPrints();
+      this.saveGame();
+    }
+    return claimed;
   }
 
   // Wears an owned item, or takes it off if it's already worn
@@ -233,12 +263,14 @@ class Game {
     }
 
     this.collection.owned.add(item.id);
+    this.collection.foundAt[item.id] = Date.now();
     writeCollection(this.collection);
     this.updateWardrobeCount();
     this.player.addXp(25);
+    const milestones = this.claimMilestones();
     this.saveGame();
     sounds.playTreasureFound();
-    this.showTreasurePopup(item);
+    this.showTreasurePopup(item, milestones);
   }
 
   setRarityVars(el, rarity) {
@@ -248,8 +280,13 @@ class Game {
     el.style.setProperty('--rarity-dim', `${color}40`);
   }
 
-  showTreasurePopup(item) {
+  showTreasurePopup(item, milestones = []) {
     this.lastFoundItem = item;
+    // Collection book milestone reached with this find
+    this.treasureBonus.style.display = milestones.length ? 'block' : 'none';
+    this.treasureBonus.textContent = milestones
+      .map((m) => (m.goldPrints ? '🐾 Collection complete! Golden paw prints unlocked!' : `📖 ${m.count} found! Collection reward: ${m.label}`))
+      .join('\n');
     this.treasureIcon.textContent = item.icon;
     this.treasureName.textContent = item.name;
     this.treasureRarity.textContent = RARITIES[item.rarity].label;
@@ -270,9 +307,9 @@ class Game {
     this.setPaused(false);
   }
 
-  openWardrobe() {
+  openWardrobe(tab = 'wear') {
     if (this.player.isDowned) return;
-    this.renderWardrobe();
+    this.showWardrobeTab(tab);
     this.wardrobe.style.display = 'flex';
     this.setPaused(true);
   }
@@ -280,6 +317,98 @@ class Game {
   closeWardrobe() {
     this.wardrobe.style.display = 'none';
     this.setPaused(false);
+  }
+
+  showWardrobeTab(tab) {
+    this.wardrobeTab = tab;
+    for (const btn of this.wardrobe.querySelectorAll('.wardrobe-tab')) {
+      btn.classList.toggle('active', btn.dataset.tab === tab);
+    }
+    this.wardrobeWear.style.display = tab === 'wear' ? 'block' : 'none';
+    this.wardrobeBook.style.display = tab === 'book' ? 'block' : 'none';
+    if (tab === 'book') this.renderBook();
+    else this.renderWardrobe();
+  }
+
+  // Small DOM helper for the book: el('div', 'class', 'text', ...children)
+  el(tag, className, text, ...children) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    node.append(...children);
+    return node;
+  }
+
+  renderBook() {
+    const owned = this.collection.owned;
+    const total = ACCESSORIES.length;
+    const book = this.wardrobeBook;
+    book.replaceChildren();
+
+    // Overall progress
+    const pct = Math.round((owned.size / total) * 100);
+    const totalBar = this.el('div', 'book-bar');
+    const totalFill = this.el('div', 'book-bar-fill');
+    totalFill.style.width = `${pct}%`;
+    totalBar.append(totalFill);
+    book.append(
+      this.el('div', 'book-total', '', this.el('strong', '', `${owned.size} / ${total}`), this.el('span', '', `accessories found (${pct}%)`)),
+      totalBar
+    );
+
+    // Progress per rarity
+    book.append(this.el('div', 'book-section-title', 'By rarity'));
+    for (const [key, r] of Object.entries(RARITIES)) {
+      const items = ACCESSORIES.filter((a) => a.rarity === key);
+      const found = items.filter((a) => owned.has(a.id)).length;
+      const bar = this.el('div', 'book-bar');
+      const fill = this.el('div', 'book-bar-fill');
+      fill.style.width = `${(found / items.length) * 100}%`;
+      fill.style.setProperty('--rarity', r.color);
+      bar.append(fill);
+      const label = this.el('span', '', r.label);
+      label.style.color = r.color;
+      book.append(this.el('div', 'book-rarity-row', '', label, bar, this.el('span', 'count', `${found}/${items.length}`)));
+    }
+
+    // Milestone rewards
+    book.append(this.el('div', 'book-section-title', 'Collection rewards'));
+    for (const m of MILESTONES) {
+      const done = this.collection.milestones.includes(m.count);
+      const row = this.el('div', `book-milestone${done ? ' done' : ''}`, '',
+        this.el('span', 'check', done ? '✅' : '🔒'),
+        this.el('span', 'what', `Find ${m.count === total ? 'all ' + total : m.count}: ${m.label}`));
+      if (done && m.goldPrints) {
+        const toggle = this.el('button', 'book-toggle', this.collection.goldPrints ? 'On' : 'Off');
+        toggle.addEventListener('click', () => {
+          this.collection.goldPrints = !this.collection.goldPrints;
+          writeCollection(this.collection);
+          this.applyGoldPrints();
+          this.renderBook();
+        });
+        row.append(toggle);
+      } else {
+        row.append(this.el('span', 'status', done ? 'Claimed' : `${m.count - owned.size} to go`));
+      }
+      book.append(row);
+    }
+
+    // Every item, with when it was found or a hint for the missing ones
+    book.append(this.el('div', 'book-section-title', 'All accessories'));
+    const dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    for (const item of ACCESSORIES) {
+      const has = owned.has(item.id);
+      const r = RARITIES[item.rarity];
+      const when = this.collection.foundAt[item.id];
+      const detail = has
+        ? `${r.label} · ${SLOTS[item.slot].label} · ${when ? 'Found ' + dateFmt.format(when) : 'Found'}`
+        : `${r.label} · ${SLOTS[item.slot].label} · Not found yet`;
+      const entry = this.el('div', `book-entry${has ? '' : ' locked'}`, '',
+        this.el('span', 'item-icon', item.icon),
+        this.el('span', 'info', '', this.el('span', 'name', has ? item.name : '???'), this.el('span', 'detail', detail)));
+      this.setRarityVars(entry, item.rarity);
+      book.append(entry);
+    }
   }
 
   renderWardrobe() {
@@ -403,6 +532,13 @@ class Game {
     this.wardrobeSlots = document.getElementById('wardrobe-slots');
     this.wardrobeProgress = document.getElementById('wardrobe-progress');
     this.wardrobeCount = document.getElementById('wardrobe-count');
+    this.wardrobeWear = document.getElementById('wardrobe-wear');
+    this.wardrobeBook = document.getElementById('wardrobe-book');
+    this.treasureBonus = document.getElementById('treasure-bonus');
+    this.treasureRadarText = document.getElementById('treasure-radar-text');
+    for (const btn of this.wardrobe.querySelectorAll('.wardrobe-tab')) {
+      btn.addEventListener('click', () => this.showWardrobeTab(btn.dataset.tab));
+    }
     document.getElementById('btn-wardrobe').addEventListener('click', () => this.openWardrobe());
     document.getElementById('btn-wardrobe-close').addEventListener('click', () => this.closeWardrobe());
     // Tapping the dimmed background closes the wardrobe too
@@ -674,6 +810,14 @@ class Game {
       this.setStyle(this.preyRadarText, 'color', '#94a3b8');
     }
 
+    // Treasure revealed by Scent Vision
+    const revealed = this.treasures.nearestRevealed;
+    this.setStyle(this.treasureRadarText, 'display', revealed ? 'block' : 'none');
+    if (revealed) {
+      this.setText(this.treasureRadarText, `✨ ${RARITIES[revealed.treasure.rarity].label} treasure (${Math.round(revealed.distance)}m)`);
+      this.setStyle(this.treasureRadarText, 'color', RARITIES[revealed.treasure.rarity].color);
+    }
+
     // Quest tracker
     this.setText(this.questStats, `Hunted: ${player.preyHunted} | Fed: ${player.meatConsumed} kg`);
   }
@@ -726,7 +870,10 @@ class Game {
     }
 
     // 3b. Buried treasure glimmer & proximity
-    this.nearTreasure = this.treasures.update(delta, this.player.position);
+    this.nearTreasure = this.treasures.update(delta, this.player.position, {
+      active: this.scentVision.isActive,
+      radius: this.scentVision.sonarRadius
+    });
 
     // 4. Update Prey AI
     this.preyManager.update(delta, this.player);

@@ -56,6 +56,7 @@
         <div class="compass-bar">
           <div class="compass-heading" id="compass-heading">NORTH</div>
           <div class="prey-radar-text" id="prey-radar-text">Tracking Scent: Bharal Herd (45m)</div>
+          <div class="treasure-radar-text" id="treasure-radar-text"></div>
         </div>
 
         <div class="difficulty-toggle" id="difficulty-toggle">
@@ -165,6 +166,7 @@
       <div class="treasure-icon" id="treasure-icon">👑</div>
       <div class="treasure-name" id="treasure-name">Gold Crown</div>
       <div class="treasure-rarity" id="treasure-rarity">Rare</div>
+      <div class="treasure-bonus" id="treasure-bonus"></div>
       <div class="ui-buttons">
         <button class="death-btn death-btn-revive" id="btn-treasure-wear">Wear it</button>
         <button class="death-btn" id="btn-treasure-close">Keep hunting</button>
@@ -180,8 +182,15 @@
         <span class="wardrobe-progress" id="wardrobe-progress">0 / 0 found</span>
         <button class="wardrobe-close" id="btn-wardrobe-close" aria-label="Close">✕</button>
       </div>
-      <p class="wardrobe-hint">Treasure is buried by rocks and trees. Look for a glimmer in the snow!</p>
-      <div id="wardrobe-slots"></div>
+      <div class="wardrobe-tabs" role="tablist">
+        <button class="wardrobe-tab active" id="tab-wear" data-tab="wear" role="tab">🎒 Wear</button>
+        <button class="wardrobe-tab" id="tab-book" data-tab="book" role="tab">📖 Collection Book</button>
+      </div>
+      <div id="wardrobe-wear">
+        <p class="wardrobe-hint">Treasure is buried by rocks and trees. Look for a glimmer in the snow, or use 👃 Scent to light it up!</p>
+        <div id="wardrobe-slots"></div>
+      </div>
+      <div id="wardrobe-book" style="display: none;"></div>
     </div>
   </div>
 

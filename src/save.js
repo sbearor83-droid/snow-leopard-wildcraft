@@ -95,7 +95,7 @@ const COLLECTION_VERSION = 1;
 
 // `validIds` filters out items that no longer exist in the catalog
 export function readCollection(validIds) {
-  const empty = { owned: new Set(), equipped: {} };
+  const empty = { owned: new Set(), equipped: {}, foundAt: {}, milestones: [], goldPrints: true };
   let data;
   try {
     const raw = localStorage.getItem(COLLECTION_KEY);
@@ -112,7 +112,14 @@ export function readCollection(validIds) {
   for (const [slot, id] of Object.entries(data.equipped || {})) {
     if (owned.has(id)) equipped[slot] = id;
   }
-  return { owned, equipped };
+  // When each item was found (ms timestamps); older saves don't have these
+  const foundAt = {};
+  for (const [id, t] of Object.entries(data.foundAt || {})) {
+    if (owned.has(id) && Number.isFinite(t)) foundAt[id] = t;
+  }
+  const milestones = Array.isArray(data.milestones) ? data.milestones.filter(Number.isFinite) : [];
+  const goldPrints = data.goldPrints !== false;
+  return { owned, equipped, foundAt, milestones, goldPrints };
 }
 
 export function writeCollection(collection) {
@@ -120,7 +127,10 @@ export function writeCollection(collection) {
     localStorage.setItem(COLLECTION_KEY, JSON.stringify({
       version: COLLECTION_VERSION,
       owned: [...collection.owned],
-      equipped: collection.equipped
+      equipped: collection.equipped,
+      foundAt: collection.foundAt,
+      milestones: collection.milestones,
+      goldPrints: collection.goldPrints
     }));
   } catch (e) {
     console.warn('Collection save failed:', e);

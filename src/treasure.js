@@ -9,6 +9,9 @@ import { sounds } from './audio.js';
 // fir trees. Each one shows as a small mound with a gem corner poking out and
 // a faint glimmer that twinkles every few seconds. Each rarity glimmers in its
 // own colour, and rarer finds can be spotted from further away.
+//
+// Scent Vision reveals them: as its sonar ring sweeps over a treasure, a beam
+// of light in the rarity colour rises from it until the scent wears off.
 // ---------------------------------------------------------------------------
 const ACTIVE_COUNT = 6; // treasures buried in the world at once
 const RESPAWN_DELAY = 45; // seconds before a dug-up treasure is replaced elsewhere
@@ -17,6 +20,8 @@ const MIN_SPACING = 18; // between treasures
 export const DIG_RANGE = 3.6; // from the leopard's centre (the model is ~3 m long)
 const NEAR_CHIME_RANGE = 12;
 const GLIMMER_FADE = 12; // metres over which the glimmer fades out past its range
+export const SCENT_RANGE = 90; // Scent Vision reveals treasure this close
+const BEAM_HEIGHT = 16; // tall enough to show over the fir canopy
 
 const RARITY_ORDER = ['common', 'rare', 'epic', 'legendary'];
 
@@ -34,6 +39,21 @@ export function pickReward(rarity, owned) {
     if (choices.length) return choices[Math.floor(Math.random() * choices.length)];
   }
   return null;
+}
+
+// Vertical fade for the Scent Vision beam: bright at the snow, fading out upward
+function makeBeamTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createLinearGradient(0, 128, 0, 0);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 128);
+  return new THREE.CanvasTexture(canvas);
 }
 
 function makeSparkleTexture() {
@@ -88,7 +108,13 @@ export class TreasureManager {
     for (const [key, r] of Object.entries(RARITIES)) {
       this.gemMats[key] = new THREE.MeshStandardMaterial({ color: r.hex, emissive: r.hex, emissiveIntensity: 0.55, roughness: 0.1, metalness: 0.2, flatShading: true });
     }
+    this.beamTex = makeBeamTexture();
+    this.beamGeo = new THREE.CylinderGeometry(0.45, 0.8, BEAM_HEIGHT, 12, 1, true);
+    this.beamGeo.translate(0, BEAM_HEIGHT / 2, 0);
     this._normal = new THREE.Vector3();
+
+    // Nearest treasure revealed by the current Scent Vision pulse: { treasure, distance } or null
+    this.nearestRevealed = null;
   }
 
   // Finds a free spot at the foot of a random rock or tree
@@ -144,12 +170,27 @@ export class TreasureManager {
     sparkle.position.set(0.12, 0.4, 0.05);
     group.add(sparkle);
 
+    // Scent Vision beam (hidden until revealed)
+    const beam = new THREE.Mesh(this.beamGeo, new THREE.MeshBasicMaterial({
+      map: this.beamTex,
+      color: r.glimmer,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      toneMapped: false
+    }));
+    beam.visible = false;
+    group.add(beam);
+
     this.scene.add(group);
     this.treasures.push({
       position: group.position,
       group,
       gem,
       sparkle,
+      beam,
+      revealed: false,
       rarity,
       glimmerRange: r.glimmerRange,
       sparkleSize: rarity === 'legendary' ? 1.9 : rarity === 'epic' ? 1.5 : 1.2,
@@ -168,11 +209,13 @@ export class TreasureManager {
     this.treasures.splice(i, 1);
     treasure.group.removeFromParent();
     treasure.sparkle.material.dispose();
+    treasure.beam.material.dispose();
     this.respawnTimers.push(RESPAWN_DELAY);
   }
 
-  // Animates every treasure and returns the nearest one within digging range (or null)
-  update(delta, playerPos) {
+  // Animates every treasure and returns the nearest one within digging range (or null).
+  // `scent` is the Scent Vision state: { active, radius } (radius = how far its sonar ring has spread).
+  update(delta, playerPos, scent = { active: false, radius: 0 }) {
     if (!this.started) {
       this.started = true;
       for (let i = 0; i < ACTIVE_COUNT; i++) this.spawn(playerPos);
@@ -185,14 +228,30 @@ export class TreasureManager {
 
     let nearest = null;
     let nearestDist = DIG_RANGE;
+    let revealedNewly = false;
+    this.nearestRevealed = null;
     for (const t of this.treasures) {
       const d = Math.hypot(t.position.x - playerPos.x, t.position.z - playerPos.z);
 
-      // Twinkle: a faint constant glow plus a brief flare every few seconds
+      // Scent Vision: revealed once the sonar ring reaches it, hidden again when the scent ends
+      if (!scent.active) t.revealed = false;
+      else if (!t.revealed && d < SCENT_RANGE && scent.radius >= d) {
+        t.revealed = true;
+        revealedNewly = true;
+      }
+      const beamTarget = t.revealed ? 0.75 : 0;
+      const beamOpacity = THREE.MathUtils.lerp(t.beam.material.opacity, beamTarget, Math.min(1, delta * 4));
+      t.beam.material.opacity = beamOpacity < 0.01 ? 0 : beamOpacity;
+      t.beam.visible = t.beam.material.opacity > 0;
+      if (t.revealed && (!this.nearestRevealed || d < this.nearestRevealed.distance)) {
+        this.nearestRevealed = { treasure: t, distance: d };
+      }
+
+      // Twinkle: a faint constant glow plus a brief flare every few seconds (steady while revealed)
       t.twinkleClock += delta;
       const phase = (t.twinkleClock % t.twinklePeriod) / 0.7;
-      const flare = phase < 1 ? Math.sin(phase * Math.PI) : 0;
-      const fade = THREE.MathUtils.clamp(1 - (d - t.glimmerRange) / GLIMMER_FADE, 0, 1);
+      const flare = t.revealed ? 0.85 + 0.15 * Math.sin(t.twinkleClock * 6) : phase < 1 ? Math.sin(phase * Math.PI) : 0;
+      const fade = t.revealed ? 1 : THREE.MathUtils.clamp(1 - (d - t.glimmerRange) / GLIMMER_FADE, 0, 1);
       t.sparkle.material.opacity = (0.18 + 0.82 * flare) * fade;
       t.sparkle.material.rotation += delta * 0.6;
       t.sparkle.scale.setScalar(t.sparkleSize * (0.45 + 0.9 * flare));
@@ -207,6 +266,7 @@ export class TreasureManager {
         nearestDist = d;
       }
     }
+    if (revealedNewly) sounds.playTreasureNear();
     return nearest;
   }
 }

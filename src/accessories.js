@@ -322,6 +322,14 @@ export const ACCESSORIES = [
 
 export const ACCESSORY_BY_ID = Object.fromEntries(ACCESSORIES.map((a) => [a.id, a]));
 
+// Collection book rewards, granted automatically as the collection grows
+export const MILESTONES = [
+  { count: 3, xp: 100, label: '+100 XP' },
+  { count: 6, xp: 250, label: '+250 XP' },
+  { count: 9, xp: 500, label: '+500 XP' },
+  { count: ACCESSORIES.length, xp: 0, goldPrints: true, label: 'Golden paw prints' }
+];
+
 // Picks a random rarity tier using the RARITIES weights
 export function rollRarity(rng = Math.random) {
   const total = Object.values(RARITIES).reduce((s, r) => s + r.weight, 0);

@@ -789,16 +789,36 @@ vec3 snowHash3(vec2 p) {
     const trackGeo = new THREE.PlaneGeometry(0.75, 0.9);
     trackGeo.rotateX(-Math.PI / 2);
 
-    // Feline print: big pad + four toes, pressed into the snow (soft blue shadow)
+    this.pawPrintTextures = {
+      normal: this.makePawPrintTexture([96, 118, 146], [120, 142, 168], [150, 170, 195]),
+      gold: null // built on first use (collection book reward)
+    };
+    const trackMat = new THREE.MeshBasicMaterial({ map: this.pawPrintTextures.normal, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+
+    this.maxPawTracks = 120;
+    this.pawTrackMesh = new THREE.InstancedMesh(trackGeo, trackMat, this.maxPawTracks);
+    this.pawTrackIndex = 0;
+    this.pawTrackDummy = new THREE.Object3D();
+    this.pawTrackDummy.position.set(0, -999, 0);
+    this.pawTrackDummy.updateMatrix();
+    for (let i = 0; i < this.maxPawTracks; i++) this.pawTrackMesh.setMatrixAt(i, this.pawTrackDummy.matrix);
+    this.pawTrackMesh.instanceMatrix.needsUpdate = true;
+    this.pawTrackMesh.frustumCulled = false;
+    this.scene.add(this.pawTrackMesh);
+    this.pawSide = 1;
+  }
+
+  // Feline print: big pad + four toes. Colours are the centre, mid and edge of each pad.
+  makePawPrintTexture(inner, mid, outer) {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
     const blob = (x, y, rx, ry, a) => {
       const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
-      g.addColorStop(0, `rgba(96, 118, 146, ${a})`);
-      g.addColorStop(0.65, `rgba(120, 142, 168, ${a * 0.55})`);
-      g.addColorStop(1, 'rgba(150, 170, 195, 0)');
+      g.addColorStop(0, `rgba(${inner.join(', ')}, ${a})`);
+      g.addColorStop(0.65, `rgba(${mid.join(', ')}, ${a * 0.55})`);
+      g.addColorStop(1, `rgba(${outer.join(', ')}, 0)`);
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(1, ry / rx);
@@ -814,19 +834,18 @@ vec3 snowHash3(vec2 p) {
     blob(27, 14, 7, 8, 0.7);
     blob(39, 14, 7, 8, 0.7);
     blob(49, 23, 7, 8, 0.7);
-    const trackMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    return new THREE.CanvasTexture(canvas);
+  }
 
-    this.maxPawTracks = 120;
-    this.pawTrackMesh = new THREE.InstancedMesh(trackGeo, trackMat, this.maxPawTracks);
-    this.pawTrackIndex = 0;
-    this.pawTrackDummy = new THREE.Object3D();
-    this.pawTrackDummy.position.set(0, -999, 0);
-    this.pawTrackDummy.updateMatrix();
-    for (let i = 0; i < this.maxPawTracks; i++) this.pawTrackMesh.setMatrixAt(i, this.pawTrackDummy.matrix);
-    this.pawTrackMesh.instanceMatrix.needsUpdate = true;
-    this.pawTrackMesh.frustumCulled = false;
-    this.scene.add(this.pawTrackMesh);
-    this.pawSide = 1;
+  // Switches every paw print between the plain snow-shadow look and gold
+  setGoldenPawPrints(on) {
+    if (on && !this.pawPrintTextures.gold) {
+      const tex = this.makePawPrintTexture([226, 160, 18], [245, 196, 64], [255, 222, 120]);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.pawPrintTextures.gold = tex;
+    }
+    this.pawTrackMesh.material.map = on ? this.pawPrintTextures.gold : this.pawPrintTextures.normal;
+    this.pawTrackMesh.material.needsUpdate = true;
   }
 
   // Called when the leopard or prey steps on snow
