@@ -317,7 +317,7 @@ class Game {
     if (this.pounceHasHit) return;
 
     // Heavy burst damage
-    this.pounceHasHit = this.strikeNearbyPrey(3.6, 0.35, 1.8, 0.95, 'POUNCE', '#ef4444');
+    this.pounceHasHit = this.strikeNearbyPrey(4.4, 0.35, 1.8, 0.95, 'POUNCE', '#ef4444');
   }
 
   checkSwipeAttack() {
@@ -328,7 +328,7 @@ class Game {
     if (!this.player.pawSwipe()) return;
 
     // Close-range melee: fast, lower damage
-    this.strikeNearbyPrey(2.7, 0.2, 0.65, 0.9, 'SWIPE', '#f59e0b');
+    this.strikeNearbyPrey(3.4, 0.2, 0.65, 0.9, 'SWIPE', '#f59e0b');
   }
 
   setText(el, text) {
@@ -480,7 +480,7 @@ class Game {
       const interval = this.player.isSprinting ? 0.12 : 0.22;
       if (this.stepTimer > interval) {
         this.stepTimer = 0;
-        this.terrain.addPawPrint(this.player.position.x, this.player.position.z, this.player.facingAngle, this.player.isSprinting ? 1.3 : 1.0);
+        this.terrain.addPawPrint(this.player.position.x, this.player.position.z, this.player.facingAngle, this.player.isSprinting ? 1.7 : 1.35);
       }
     }
 

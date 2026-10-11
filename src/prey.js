@@ -50,9 +50,9 @@ export class PreyManager {
       this.spawnPrey('hare', x, z);
     }
 
-    // Spawn 2 Legendary Boss Yaks (Titan Crag Yaks)
-    this.spawnPrey('yak', 42, 45);
-    this.spawnPrey('yak', -55, -50);
+    // Spawn 2 Legendary Boss Yaks (Titan Crag Yaks) far out on the high crags, away from camp
+    this.spawnPrey('yak', 84, 88);
+    this.spawnPrey('yak', -96, -82);
   }
 
   spawnPrey(type, x, z) {
@@ -120,8 +120,9 @@ export class PreyAnimal {
       this.baseMaxHp = 300;
       this.meatAmount = 350;
       this.xpReward = 350;
-      this.maxFleeSpeed = 10.5;
-      this.chargeSpeed = 16.5;
+      // A yak is a heavy animal: slower than a sprinting snow leopard both charging and fleeing
+      this.maxFleeSpeed = 7.5;
+      this.chargeSpeed = 11.0;
       this.baseRamDamage = 18;
       this.chargeTimer = 0;
       this.chargeCooldown = 0;
@@ -138,7 +139,7 @@ export class PreyAnimal {
       this.baseMaxHp = 32;
       this.meatAmount = 35;
       this.xpReward = 45;
-      this.maxFleeSpeed = 14.8;
+      this.maxFleeSpeed = 12.5;
       this.chargeSpeed = 0;
       this.baseRamDamage = 0;
     }
@@ -714,7 +715,7 @@ export class PreyAnimal {
       this.headNode.rotation.x = 0.55; // Lower horns ready to ram!
 
       // Ramming Snow Leopard
-      if (distToPlayer < 2.5 && this.chargeCooldown <= 0) {
+      if (distToPlayer < 3.2 && this.chargeCooldown <= 0) {
         this.chargeCooldown = 2.4;
         player.takeDamage(this.ramDamage);
         sounds.playBossGrunt();
@@ -798,14 +799,15 @@ export class PreyAnimal {
     this.mesh.position.copy(this.position);
     this.mesh.rotation.y = this.facingAngle;
 
-    // Leg trot animations
-    const isChargingOrFleeing = this.state === 'FLEEING' || this.state === 'CHARGING';
-    const legFreq = isChargingOrFleeing ? 18 : 6;
-    const legAmp = isChargingOrFleeing ? 0.7 : 0.3;
+    // Leg animation: stride rate follows actual ground speed and leg length, so a lumbering yak
+    // takes slow heavy steps while a hare's legs blur
     if (this.speed > 0.2) {
+      const strideLen = this.isBoss ? 2.6 : (this.type === 'ibex' ? 1.5 : 0.9);
+      this.legPhase = (this.legPhase || 0) + delta * (this.speed / strideLen) * Math.PI * 2;
+      const legAmp = Math.min(0.75, 0.25 + this.speed * 0.045);
       this.legMeshes.forEach((leg, idx) => {
         const offset = idx % 2 === 0 ? 0 : Math.PI;
-        leg.rotation.x = Math.sin(this.animTime * legFreq + offset) * legAmp;
+        leg.rotation.x = Math.sin(this.legPhase + offset) * legAmp;
       });
     }
   }

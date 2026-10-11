@@ -6,17 +6,17 @@ export class GameCamera {
     this.camera = camera;
     this.terrain = terrain;
 
-    this.target = new THREE.Vector3(0, 0.72, 0);
-    this.distance = 5.2;
-    this.minDistance = 2.8;
-    this.maxDistance = 14.0;
+    this.target = new THREE.Vector3(0, 1.0, 0);
+    this.distance = 6.8;
+    this.minDistance = 3.6;
+    this.maxDistance = 17.0;
 
     this.yaw = Math.PI - 0.22; // Over-the-right-shoulder 3/4 cinematic angle
     this.pitch = 0.38; // 22 degrees downward elevation showing full body and tail
     this.minPitch = -0.10;
     this.maxPitch = 1.25;
 
-    this.smoothPos = new THREE.Vector3(0, 2.8, -5);
+    this.smoothPos = new THREE.Vector3(0, 3.4, -6.5);
     this.desiredPos = new THREE.Vector3();
     this.targetLookAt = new THREE.Vector3();
     this.baseFov = 60;
@@ -67,7 +67,7 @@ export class GameCamera {
 
   update(delta, playerPos, isSprinting, isPouncing, isStalking = false) {
     // Follow player center (dips lower in stalking mode for predator prowl perspective)
-    this.targetLookAt.set(playerPos.x, playerPos.y + (isStalking ? 0.55 : 0.72), playerPos.z);
+    this.targetLookAt.set(playerPos.x, playerPos.y + (isStalking ? 0.75 : 1.0), playerPos.z);
     this.target.lerp(this.targetLookAt, delta * 10);
 
     // Dynamic cinematic distance: pulls in close when stalking, pulls back when sprinting
@@ -84,8 +84,8 @@ export class GameCamera {
 
     // Terrain Collision Avoidance: prevent camera clipping through snow rocks
     const groundAtCam = this.terrain.getTerrainHeight(desiredPos.x, desiredPos.z);
-    if (desiredPos.y < groundAtCam + 1.2) {
-      desiredPos.y = groundAtCam + 1.2;
+    if (desiredPos.y < groundAtCam + 1.4) {
+      desiredPos.y = groundAtCam + 1.4;
     }
 
     this.smoothPos.lerp(desiredPos, delta * 12);

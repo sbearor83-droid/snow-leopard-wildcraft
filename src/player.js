@@ -9,10 +9,17 @@ const _tmpMat = new THREE.Matrix4();
 // Rigged snow leopard model (skinned mesh + 17 skeletal clips, baked rosette coat).
 // Model space: faces +Z, feet on y = 0, ~1.0 m long before scaling.
 const MODEL_URL = `${import.meta.env.BASE_URL}snow_leopard.glb`;
-const MODEL_SCALE = 2.4;
+const MODEL_SCALE = 3.0;
 
-// Natural ground speed (m/s, after scaling) at which each locomotion clip's feet don't slide.
-const CLIP_NATURAL_SPEED = { Walk: 2.6, Run: 4.2, ProwlWalk: 2.0 };
+// Ground speed (model units per second at playback rate 1) that each locomotion clip's feet
+// cover during their stance phase, measured from the toe bones. Multiplied by MODEL_SCALE this
+// is the speed at which the paws stay planted; playback rate = ground speed / this.
+const CLIP_STRIDE_SPEED = { Walk: 0.926, Run: 2.55, ProwlWalk: 1.82 };
+
+// Fur shell rendering (extruded alpha-tested copies of the skinned mesh)
+const IS_MOBILE = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth <= 1024;
+const FUR_SHELLS = IS_MOBILE ? 5 : 10;
+const FUR_LENGTH = 0.019; // model units before scaling (~6 cm in-game)
 
 // Snow Leopard player: skinned 3D model, skeletal animation state machine & wildcraft survival stats
 export class SnowLeopard {
@@ -39,9 +46,9 @@ export class SnowLeopard {
     // Movement & State
     this.position = new THREE.Vector3(0, 0, 0);
     this.facingAngle = 0;
-    this.walkSpeed = 6.5;
-    this.sprintSpeed = 15.5;
-    this.stalkSpeed = 3.2;
+    this.walkSpeed = 5.2;
+    this.sprintSpeed = 14.5;
+    this.stalkSpeed = 3.8;
     this.currentSpeed = 0;
     this.turnVelocity = 0;
 
@@ -112,17 +119,11 @@ export class SnowLeopard {
       // Pounce / death clips move the body well outside the bind-pose bounds
       child.frustumCulled = false;
 
-      const mat = child.material;
-      if (mat) {
-        mat.roughness = 0.92;
-        mat.metalness = 0.0;
-        mat.side = THREE.FrontSide;
-        if (mat.map) mat.map.anisotropy = 4;
-        mat.needsUpdate = true;
-      }
+      child.material = this.createFurMaterial(child.material);
     });
 
     this.modelRoot.add(model);
+    if (this.skinnedMesh) this.createFurShells(this.skinnedMesh);
     this.addWhiskers();
 
     if (gltf.animations && gltf.animations.length > 0) {
@@ -146,6 +147,143 @@ export class SnowLeopard {
     }
 
     this.modelLoaded = true;
+  }
+
+  // Soft fur base material: baked coat + fur-grain normal map + a sheen lobe for the velvety
+  // light scattering real fur has at grazing angles.
+  createFurMaterial(src) {
+    const mat = new THREE.MeshPhysicalMaterial({
+      map: src.map || null,
+      normalMap: src.normalMap || null,
+      normalScale: src.normalScale ? src.normalScale.clone() : new THREE.Vector2(0.6, 0.6),
+      roughness: 0.9,
+      metalness: 0.0,
+      sheen: 0.55,
+      sheenRoughness: 0.75,
+      sheenColor: new THREE.Color(0xe8edf2),
+      side: THREE.FrontSide
+    });
+    if (mat.map) mat.map.anisotropy = 4;
+    return mat;
+  }
+
+  // Tileable hair-follicle alpha texture: each fibre is a soft dot whose brightness sets how far
+  // up the shell stack it survives the alpha test, so fibres taper towards the tips.
+  createFurStrandTexture() {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+
+    let seed = 1337;
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 7000; i++) {
+      const x = rnd() * size;
+      const y = rnd() * size;
+      const r = 0.7 + rnd() * 1.3;
+      const a = 0.4 + rnd() * 0.6;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(255,255,255,${a})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      // draw with wrap-around so the tile seams are invisible
+      for (let ox = -size; ox <= size; ox += size) {
+        for (let oy = -size; oy <= size; oy += size) {
+          ctx.beginPath();
+          ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(30, 30);
+    return tex;
+  }
+
+  // Volumetric fur: N copies of the skinned mesh pushed out along the (skinned) normals with an
+  // alpha-tested follicle texture. Per-vertex fur length comes from the bone weights, so the
+  // tail, belly, chest ruff and neck get long plush fur while the face, ears and paws stay short.
+  createFurShells(skinnedMesh) {
+    const geo = skinnedMesh.geometry;
+    const skinIndex = geo.attributes.skinIndex;
+    const skinWeight = geo.attributes.skinWeight;
+    const pos = geo.attributes.position;
+    const nrm = geo.attributes.normal;
+    const boneNames = skinnedMesh.skeleton.bones.map((b) => b.name);
+    const lengthByBone = boneNames.map((name) => {
+      if (/^DEF-spine00[012]?$/.test(name) || name === 'DEF-spine') return 1.35; // tail
+      if (name.startsWith('DEF-breast')) return 1.5; // chest ruff
+      if (/DEF-spine0(09|10)/.test(name)) return 1.35; // neck ruff
+      if (name === 'DEF-jaw' || name === 'DEF-spine011') return 0.5; // face
+      if (name.startsWith('DEF-ear')) return 0.45;
+      if (/toe|foot/.test(name)) return 0.45; // paws
+      if (/shin/.test(name)) return 0.7; // lower legs
+      return 1.0;
+    });
+
+    const furMul = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) {
+      let m = 0;
+      for (let c = 0; c < 4; c++) {
+        const b = skinIndex.getComponent(i, c);
+        const w = skinWeight.getComponent(i, c);
+        m += (lengthByBone[b] || 1.0) * w;
+      }
+      // belly / underside fur hangs longer
+      if (nrm.getY(i) < -0.35 && pos.getY(i) < 0.0 && pos.getY(i) > -0.3) m *= 1.4;
+      furMul[i] = m;
+    }
+    geo.setAttribute('furMul', new THREE.BufferAttribute(furMul, 1));
+
+    const strandTex = this.createFurStrandTexture();
+    const baseMat = skinnedMesh.material;
+    this.furShells = [];
+
+    for (let s = 1; s <= FUR_SHELLS; s++) {
+      const t = s / FUR_SHELLS;
+      const mat = new THREE.MeshPhysicalMaterial({
+        map: baseMat.map,
+        normalMap: baseMat.normalMap,
+        normalScale: baseMat.normalScale,
+        alphaMap: strandTex,
+        alphaTest: 0.08 + t * 0.7,
+        roughness: 0.95 - 0.15 * t,
+        metalness: 0.0,
+        sheen: 0.7,
+        sheenRoughness: 0.6,
+        sheenColor: new THREE.Color(0xf2f5f8),
+        side: THREE.FrontSide
+      });
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uShell = { value: t };
+        shader.uniforms.uFurLength = { value: FUR_LENGTH };
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute float furMul;\nuniform float uShell;\nuniform float uFurLength;')
+          .replace('#include <skinning_vertex>', '#include <skinning_vertex>\n{\n  float ext = uFurLength * uShell * furMul;\n  transformed += normalize(objectNormal) * ext;\n  transformed.y -= ext * uShell * 0.45;\n}');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform float uShell;')
+          .replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb *= mix(0.82, 1.05, uShell);');
+      };
+      mat.customProgramCacheKey = () => 'snowleopard-fur-shell';
+
+      const shell = new THREE.SkinnedMesh(geo, mat);
+      shell.bind(skinnedMesh.skeleton, skinnedMesh.bindMatrix);
+      shell.frustumCulled = false;
+      shell.castShadow = false;
+      shell.receiveShadow = true;
+      shell.renderOrder = s;
+      skinnedMesh.add(shell);
+      this.furShells.push(shell);
+    }
   }
 
   // Thin white vibrissae parented to the head bone so they follow every head movement.
@@ -224,7 +362,7 @@ export class SnowLeopard {
       blending: THREE.AdditiveBlending
     });
     this.slashMesh = new THREE.Mesh(slashGeo, slashMat);
-    this.slashMesh.position.set(0.1, 0.55, 1.3);
+    this.slashMesh.position.set(0.1, 0.7, 1.7);
     this.slashMesh.rotation.y = -0.3;
     this.mesh.add(this.slashMesh);
   }
@@ -488,7 +626,7 @@ export class SnowLeopard {
       this.turnVelocity = THREE.MathUtils.lerp(this.turnVelocity, 0, delta * 8);
     }
 
-    this.terrain.resolveCollision(this.position, 0.85);
+    this.terrain.resolveCollision(this.position, 1.15);
 
     const maxBound = this.terrain.halfSize - 15;
     this.position.x = THREE.MathUtils.clamp(this.position.x, -maxBound, maxBound);
@@ -539,20 +677,13 @@ export class SnowLeopard {
     } else if (this.hitTimer > 0 && !isMoving) {
       this.playAction('Hit_Left', 0.05);
     } else if (isMoving) {
-      let name;
-      let minScale;
-      let maxScale;
-      if (this.isStalking) {
-        name = 'ProwlWalk'; minScale = 0.6; maxScale = 1.8;
-      } else if (this.isSprinting) {
-        name = 'Run'; minScale = 0.8; maxScale = 1.8;
-      } else {
-        name = 'Walk'; minScale = 0.6; maxScale = 2.0;
-      }
+      const name = this.isStalking ? 'ProwlWalk' : (this.isSprinting ? 'Run' : 'Walk');
       this.playAction(name, 0.22);
       const action = this.actions[name];
       if (action) {
-        action.timeScale = THREE.MathUtils.clamp(this.currentSpeed / CLIP_NATURAL_SPEED[name], minScale, maxScale);
+        // Lock the paws to the ground: playback rate follows actual ground speed exactly
+        const plantedSpeed = CLIP_STRIDE_SPEED[name] * MODEL_SCALE;
+        action.timeScale = Math.max(0.35, this.currentSpeed / plantedSpeed);
       }
     } else {
       this.biteTimer = 0;
