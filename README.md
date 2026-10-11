@@ -48,6 +48,10 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 - Draws scent trails toward nearby living prey (amber: ibex, cyan: hare, red: boss).
 - The compass radar shows the nearest prey and its distance.
 
+### 🐆 Snow Leopard Model
+- `public/snow_leopard.glb` is a rigged, skinned snow leopard (6.7k triangles, 49 bones) with 17 skeletal clips: Idle_Look, ProwlIdle, Walk, ProwlWalk, Run, Pounce, Attack_Left/Right, Bite, Hit_Left, Death and more. `src/player.js` drives these from the gameplay state (stalk → ProwlWalk, sprint → Run, pounce → Pounce, swipe → alternating Attack clips) and syncs the stride rate to the ground speed.
+- The coat (rosettes, dorsal blotches, leg spots, ringed tail with a black tip, eyes, nose, ears) is baked onto the model's UV layout by `scripts/bake_snow_leopard_coat.py` and embedded in the GLB as a 2048px base color plus a 1024px fur-grain normal map. Re-run the script (needs `numpy` and `Pillow`) after tweaking the colors or pattern parameters at the top of `bake_coat()`.
+
 ### Difficulty
 - **Easy:** slower hunger, less perceptive and slower prey, weaker boss.
 - **Medium:** standard wilderness.
