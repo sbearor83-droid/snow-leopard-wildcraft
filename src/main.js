@@ -25,7 +25,7 @@ class Game {
 
     // Setup Three.js Scene & Renderer
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xb8d2e8, 140, 720);
+    this.scene.fog = new THREE.Fog(0xc9d9e8, 110, 640);
 
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -43,7 +43,7 @@ class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.0;
     this.container.appendChild(this.renderer.domElement);
 
     // Context loss guards to prevent Android GPU driver freezes
@@ -127,11 +127,11 @@ class Game {
 
   setupLighting() {
     // Hemispherical Ambient Light (azure alpine sky + warm snow ground reflection)
-    const hemiLight = new THREE.HemisphereLight(0xbfdbfe, 0xcfdce8, 0.85);
+    const hemiLight = new THREE.HemisphereLight(0x9ec4ea, 0xe4ebf1, 0.95);
     this.scene.add(hemiLight);
 
     // Directional Alpine Sun Light with Crisp Shadows
-    this.sunLight = new THREE.DirectionalLight(0xfff6e5, 1.8);
+    this.sunLight = new THREE.DirectionalLight(0xfff3dc, 2.3);
     this.sunLight.position.set(65, 85, 45);
     this.sunLight.castShadow = true;
     const shadowRes = this.isMobile ? 1024 : 2048;
@@ -144,12 +144,13 @@ class Game {
     this.sunLight.shadow.camera.right = shadowDist;
     this.sunLight.shadow.camera.top = shadowDist;
     this.sunLight.shadow.camera.bottom = -shadowDist;
-    this.sunLight.shadow.bias = -0.0004;
-    this.sunLight.shadow.normalBias = 0.02;
+    this.sunLight.shadow.bias = -0.0003;
+    this.sunLight.shadow.normalBias = 0.035;
+    this.sunLight.shadow.radius = this.isMobile ? 1 : 2;
     this.scene.add(this.sunLight);
 
     // Cinematic Rim Light (back-light silhouetting feline and prey muscles/fur)
-    this.rimLight = new THREE.DirectionalLight(0x93c5fd, 0.85);
+    this.rimLight = new THREE.DirectionalLight(0x9ec8f5, 0.7);
     this.rimLight.position.set(-50, 40, -40);
     this.scene.add(this.rimLight);
   }
