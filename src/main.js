@@ -16,6 +16,7 @@ import {
   dayKey, msUntilTomorrow, dailyLoginReward, dailyOffers, canAfford, formatPrice, formatReward
 } from './economy.js';
 import { BILLING_ENABLED, PRODUCTS, purchase } from './store.js';
+import { cloud } from './cloud.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -104,6 +105,11 @@ class Game {
     const owed = this.claimMilestones();
     if (owed.length) this.spawnFloatingText(`📖 Collection rewards: ${owed.map((m) => m.label).join(', ')}`, '#4ade80', { x: window.innerWidth * 0.5, y: 140 });
     this.setupDaily();
+
+    // Cloud saves (no-op until configured in cloud.js)
+    cloud.subscribe(() => this.renderCloud());
+    cloud.init({ beforeReload: () => (this.isResetting = true) });
+    this.renderCloud();
     setInterval(() => this.saveGame(), AUTOSAVE_INTERVAL_MS);
     // Android can kill a backgrounded app without warning, so save the moment it's hidden
     document.addEventListener('visibilitychange', () => {
@@ -528,6 +534,61 @@ class Game {
     this.spawnFloatingText(`☀️ Daily reward ${formatReward(login.reward)}`, '#fcd34d', { x: window.innerWidth * 0.5, y: 150 });
   }
 
+  // ------------------------------------------------------------------ cloud save
+  openCloud() {
+    if (this.player.isDowned) return;
+    this.renderCloud();
+    this.cloudPanel.style.display = 'flex';
+    this.setPaused(true);
+  }
+
+  closeCloud() {
+    this.cloudPanel.style.display = 'none';
+    this.setPaused(false);
+  }
+
+  renderCloud() {
+    if (!this.btnCloud) return;
+    // Players only see the button once cloud saves are configured; developers always do
+    this.btnCloud.style.display = cloud.available || import.meta.env.DEV ? '' : 'none';
+    const badges = { synced: '✓', syncing: '…', restoring: '…', 'signing-in': '…', error: '!', 'signed-out': 'Off' };
+    this.cloudBadge.textContent = badges[cloud.status] || '';
+
+    const ago = cloud.lastSyncAt ? this.timeAgo(cloud.lastSyncAt) : 'never';
+    const lines = {
+      off: "Cloud saves aren't set up yet.\n(Developer: add your Firebase project in src/cloud.js.)",
+      starting: 'Connecting…',
+      'signed-out': 'Not signed in. Progress is only saved on this device.',
+      'signing-in': 'Signing in…',
+      syncing: `Signed in as ${cloud.user ? cloud.user.name : ''}\nSyncing…`,
+      restoring: 'Loading your cloud save…',
+      synced: `Signed in as ${cloud.user ? cloud.user.name : ''}\n✓ Saved to the cloud ${ago}`,
+      error: cloud.user ? `Signed in as ${cloud.user.name}\nLast synced ${ago}` : 'Not signed in.'
+    };
+    this.cloudStatus.textContent = lines[cloud.status] || '';
+    this.cloudError.textContent = cloud.error;
+    this.cloudError.style.display = cloud.error ? 'block' : 'none';
+
+    const signedIn = Boolean(cloud.user);
+    const busy = ['starting', 'signing-in', 'syncing', 'restoring'].includes(cloud.status);
+    this.btnCloudSignIn.style.display = cloud.available && !signedIn ? '' : 'none';
+    this.btnCloudSignIn.disabled = busy;
+    this.btnCloudSync.style.display = signedIn ? '' : 'none';
+    this.btnCloudSync.disabled = busy;
+    this.btnCloudSignOut.style.display = signedIn ? '' : 'none';
+    this.btnCloudSignOut.disabled = busy;
+    this.btnCloudDelete.style.display = signedIn ? 'block' : 'none';
+    this.btnCloudDelete.disabled = busy;
+  }
+
+  timeAgo(time) {
+    const s = Math.max(0, Math.round((Date.now() - time) / 1000));
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+    return new Date(time).toLocaleDateString();
+  }
+
   // ------------------------------------------------------------------ shop
   openShop() {
     if (this.player.isDowned) return;
@@ -736,6 +797,29 @@ class Game {
     this.dailyStrip = document.getElementById('daily-strip');
     this.dailyNote = document.getElementById('daily-note');
     document.getElementById('btn-daily-claim').addEventListener('click', () => this.claimDailyReward());
+
+    this.cloudPanel = document.getElementById('cloud-panel');
+    this.btnCloud = document.getElementById('btn-cloud');
+    this.cloudBadge = document.getElementById('cloud-badge');
+    this.cloudStatus = document.getElementById('cloud-status');
+    this.cloudError = document.getElementById('cloud-error');
+    this.btnCloudSignIn = document.getElementById('btn-cloud-signin');
+    this.btnCloudSync = document.getElementById('btn-cloud-sync');
+    this.btnCloudSignOut = document.getElementById('btn-cloud-signout');
+    this.btnCloudDelete = document.getElementById('btn-cloud-delete');
+    this.btnCloudDelete.addEventListener('click', () => {
+      if (window.confirm('Delete your cloud save and sign-in account? Progress on this device is kept, but the copy in the cloud is gone for good.')) cloud.deleteAccount();
+    });
+    this.btnCloud.addEventListener('click', () => this.openCloud());
+    document.getElementById('btn-cloud-close').addEventListener('click', () => this.closeCloud());
+    this.cloudPanel.addEventListener('click', (e) => {
+      if (e.target === this.cloudPanel) this.closeCloud();
+    });
+    this.btnCloudSignIn.addEventListener('click', () => cloud.signIn());
+    this.btnCloudSync.addEventListener('click', () => cloud.sync());
+    this.btnCloudSignOut.addEventListener('click', () => {
+      if (window.confirm('Sign out? Your progress stays saved in your Google account, and this device will start fresh until you sign in again.')) cloud.signOut();
+    });
     this.treasureRadarText = document.getElementById('treasure-radar-text');
     for (const btn of this.wardrobe.querySelectorAll('.wardrobe-tab')) {
       btn.addEventListener('click', () => this.showWardrobeTab(btn.dataset.tab));
@@ -1115,5 +1199,9 @@ class Game {
 // Start Game on window load
 window.addEventListener('DOMContentLoaded', () => {
   const game = new Game();
-  if (import.meta.env.DEV) window.__game = game; // Handy for debugging in the browser console
+  if (import.meta.env.DEV) {
+    // Handy for debugging in the browser console
+    window.__game = game;
+    window.__cloud = cloud;
+  }
 });

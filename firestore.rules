@@ -1,0 +1,33 @@
+// Firestore security rules for Snow Leopard World cloud saves (see src/cloud.js).
+// Paste into Firebase console > Firestore Database > Rules and publish.
+//
+// Each player can only read and write their own document, players/{their uid}.
+// Writes must bump `rev` by exactly one, so two phones can't overwrite each
+// other's progress without merging first.
+//
+// Note: players can still edit their own save (as with any offline game), so
+// before selling Snow Crystals, grant purchased Crystals from a server
+// (e.g. a RevenueCat webhook + Cloud Function) rather than trusting the app.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /players/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['schema', 'rev', 'profile', 'leopard', 'updatedAt'])
+        && request.resource.data.schema == 1
+        && request.resource.data.rev is int
+        && request.resource.data.rev == (resource == null ? 1 : resource.data.rev + 1)
+        && request.resource.data.profile is string
+        && request.resource.data.profile.size() < 50000
+        && request.resource.data.leopard is string
+        && request.resource.data.leopard.size() < 10000
+        && request.resource.data.updatedAt == request.time;
+
+      // Players can delete their own cloud save (Google Play requires account deletion)
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

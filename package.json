@@ -9,12 +9,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "android": "vite build && npx cap sync android",
-    "icons": "capacitor-assets generate --android --iconBackgroundColor '#16325a' --iconBackgroundColorDark '#16325a' --splashBackgroundColor '#0d1520' --splashBackgroundColorDark '#0d1520' && rm -rf android/app/src/main/res/drawable-*night*"
+    "icons": "capacitor-assets generate --android --iconBackgroundColor '#16325a' --iconBackgroundColorDark '#16325a' --splashBackgroundColor '#0d1520' --splashBackgroundColorDark '#0d1520' && rm -rf android/app/src/main/res/drawable-*night*",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.2.1",
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
+    "firebase": "^12.19.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

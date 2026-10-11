@@ -9,10 +9,87 @@
 // Bump SAVE_VERSION if the format changes and add a migration in migrate().
 // ---------------------------------------------------------------------------
 const SAVE_KEY = 'snowLeopardWorld.save';
+const COLLECTION_KEY = 'snowLeopardWorld.collection';
 const SAVE_VERSION = 1;
 export const AUTOSAVE_INTERVAL_MS = 15 * 1000;
 
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
+
+// Cloud sync bookkeeping (see cloud.js): when this device last changed its data,
+// which account/revision it last synced with, and the wallet at that moment.
+const SYNC_META_KEY = 'snowLeopardWorld.syncMeta';
+let localWriteListener = null;
+let writesFrozen = false;
+
+// Stops all saving until the page reloads (used while swapping in cloud data,
+// so the running game can't overwrite it with its stale in-memory state)
+export function freezeWrites() {
+  writesFrozen = true;
+}
+
+// cloud.js registers here to hear about every local save
+export function onLocalWrite(callback) {
+  localWriteListener = callback;
+}
+
+function markLocalWrite() {
+  try {
+    const meta = readSyncMeta();
+    meta.updatedAt = Date.now();
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta));
+  } catch (e) {
+    // Storage unavailable: nothing to sync either
+  }
+  if (localWriteListener) localWriteListener();
+}
+
+export function readSyncMeta() {
+  const meta = { updatedAt: 0, uid: null, syncedRev: 0, lastSyncAt: 0, baseWallet: null };
+  try {
+    Object.assign(meta, JSON.parse(localStorage.getItem(SYNC_META_KEY) || '{}'));
+  } catch (e) {
+    // Corrupt meta: start over (the next sync merges everything)
+  }
+  return meta;
+}
+
+export function writeSyncMeta(meta) {
+  try {
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta));
+  } catch (e) {
+    console.warn('Sync meta save failed:', e);
+  }
+}
+
+// The stored progress exactly as saved (JSON strings, or null), for cloud upload
+export function readRawProgress() {
+  try {
+    return { profile: localStorage.getItem(COLLECTION_KEY), leopard: localStorage.getItem(SAVE_KEY) };
+  } catch (e) {
+    return { profile: null, leopard: null };
+  }
+}
+
+// Replaces local progress with synced data (does not count as a local change)
+export function writeRawProgress({ profile, leopard }) {
+  try {
+    if (profile) localStorage.setItem(COLLECTION_KEY, profile);
+    else localStorage.removeItem(COLLECTION_KEY);
+    if (leopard) localStorage.setItem(SAVE_KEY, leopard);
+    else localStorage.removeItem(SAVE_KEY);
+  } catch (e) {
+    console.warn('Could not store synced progress:', e);
+  }
+}
+
+// Wipes everything on this device (used when signing out of cloud saves)
+export function clearAllProgress() {
+  try {
+    for (const key of [SAVE_KEY, COLLECTION_KEY, SYNC_META_KEY]) localStorage.removeItem(key);
+  } catch (e) {
+    console.warn('Could not clear progress:', e);
+  }
+}
 
 function isFiniteNumber(v) {
   return typeof v === 'number' && Number.isFinite(v);
@@ -46,8 +123,10 @@ export function buildSave(player, difficulty) {
 }
 
 export function writeSave(player, difficulty) {
+  if (writesFrozen) return false;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(buildSave(player, difficulty)));
+    markLocalWrite();
     return true;
   } catch (e) {
     console.warn('Save failed:', e);
@@ -79,6 +158,7 @@ export function readSave() {
 export function clearSave() {
   try {
     localStorage.removeItem(SAVE_KEY);
+    markLocalWrite();
   } catch (e) {
     console.warn('Could not clear save:', e);
   }
@@ -90,7 +170,6 @@ export function clearSave() {
 // Kept under its own key so "New game" resets the leopard but not the
 // accessories the player has found or bought, their wallet, or daily rewards.
 // ---------------------------------------------------------------------------
-const COLLECTION_KEY = 'snowLeopardWorld.collection';
 const COLLECTION_VERSION = 1;
 
 // `validIds` filters out items that no longer exist in the catalog
@@ -139,6 +218,7 @@ export function readCollection(validIds) {
 }
 
 export function writeCollection(collection) {
+  if (writesFrozen) return;
   try {
     localStorage.setItem(COLLECTION_KEY, JSON.stringify({
       version: COLLECTION_VERSION,
@@ -151,6 +231,7 @@ export function writeCollection(collection) {
       daily: collection.daily,
       removeAds: collection.removeAds
     }));
+    markLocalWrite();
   } catch (e) {
     console.warn('Collection save failed:', e);
   }

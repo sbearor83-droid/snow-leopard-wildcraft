@@ -1092,6 +1092,52 @@ html, body {
   padding: 8px 0;
 }
 
+/* Cloud save */
+.cloud-btn {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.85), rgba(3, 105, 161, 0.85));
+  border-color: #7dd3fc;
+}
+
+.cloud-card {
+  width: min(440px, 100%);
+}
+
+.cloud-intro {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin: 8px 0 12px;
+  text-align: left;
+}
+
+.cloud-status {
+  font-size: 14px;
+  font-weight: 800;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.9);
+  text-align: left;
+  white-space: pre-line;
+}
+
+.cloud-error {
+  display: none;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #fca5a5;
+  text-align: left;
+}
+
+.cloud-delete {
+  display: none;
+  margin: 12px auto 0;
+  background: none;
+  border: none;
+  color: #fca5a5;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* Death Screen */
 #death-screen {
   display: none;

@@ -82,6 +82,16 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 ### 💾 Saving
 Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position and difficulty are restored on the next launch. **New game** under the difficulty toggle resets the leopard; accessories, Pelts, Crystals and daily progress are kept. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
 
+
+### ☁️ Cloud Saves (off until set up)
+Players can **Sign in with Google** from the ☁️ button to keep their accessories, Pelts, Crystals, daily rewards and leopard in the cloud, so progress survives reinstalls and moves to new phones. It uses Firebase (Google sign-in + Firestore) and stays hidden from players until a Firebase project is added. Setup steps are at the top of `src/cloud.js`, and the database rules are in `firestore.rules`.
+
+- **Syncing:** happens on launch, about once a minute while playing, when the app goes to the background, and on **Sync now**.
+- **Two phones / a new phone:** progress is merged, never overwritten. Items from both sides are kept, Pelts and Crystals add up what each phone earned or spent since its last sync (nothing counted twice), and the higher-level leopard wins. The rules are in `src/cloudmerge.js` and covered by `npm test`.
+- **Offline:** the game keeps saving on the device and syncs later.
+- **Sign out** leaves the cloud copy intact and starts the device fresh. **Delete my cloud save** removes the cloud copy and the sign-in account (a Google Play requirement).
+- **Trying it without Firebase:** run `npm run dev` and open the game with `?cloud=mock`. That uses a pretend cloud stored in the browser (development builds only).
+
 ## 📱 Building for Android
 
 The Capacitor Android project is already set up in `android/` (app ID `com.snowleopardworld.game`).

@@ -70,6 +70,7 @@
         <div class="menu-row">
           <button class="menu-btn" id="btn-wardrobe" title="Wear the accessories you've found">🎒 Wardrobe <span id="wardrobe-count">0/0</span></button>
           <button class="menu-btn shop-btn" id="btn-shop" title="Shop">🛒 <span class="wallet-amount" id="hud-pelts">🐾 0</span> <span class="wallet-amount" id="hud-crystals">💎 0</span></button>
+          <button class="menu-btn cloud-btn" id="btn-cloud" title="Cloud save" style="display: none;">☁️ <span id="cloud-badge"></span></button>
           <button class="privacy-btn" id="btn-new-game">New game</button>
         </div>
       </div>
@@ -198,6 +199,26 @@
         <button class="wardrobe-close" id="btn-shop-close" aria-label="Close">✕</button>
       </div>
       <div id="shop-body"></div>
+    </div>
+  </div>
+
+  <!-- Cloud Save -->
+  <div id="cloud-panel" class="ui-overlay">
+    <div class="ui-card cloud-card">
+      <div class="wardrobe-header">
+        <h2>☁️ Cloud Save</h2>
+        <span class="wardrobe-progress"></span>
+        <button class="wardrobe-close" id="btn-cloud-close" aria-label="Close">✕</button>
+      </div>
+      <p class="cloud-intro">Sign in to keep your accessories, Pelts, Crystals and leopard safe in your Google account, even if you reinstall or get a new phone.</p>
+      <div class="cloud-status" id="cloud-status"></div>
+      <div class="cloud-error" id="cloud-error"></div>
+      <div class="ui-buttons">
+        <button class="death-btn death-btn-revive" id="btn-cloud-signin">Sign in with Google</button>
+        <button class="death-btn" id="btn-cloud-sync">Sync now</button>
+        <button class="death-btn" id="btn-cloud-signout">Sign out</button>
+      </div>
+      <button class="cloud-delete" id="btn-cloud-delete">Delete my cloud save</button>
     </div>
   </div>
 
