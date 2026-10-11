@@ -33,3 +33,10 @@ release-builds/*.aab
 .DS_Store
 Thumbs.db
 *.log
+
+# Scratch & test assets
+public/test_*
+public/temp_*
+public/fur_*
+scripts/take_screenshot.js
+scripts/generate_snow_leopard_atlas.js

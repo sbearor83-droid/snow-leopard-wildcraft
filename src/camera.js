@@ -6,17 +6,17 @@ export class GameCamera {
     this.camera = camera;
     this.terrain = terrain;
 
-    this.target = new THREE.Vector3(0, 2, 0);
-    this.distance = 9.5;
-    this.minDistance = 4.0;
-    this.maxDistance = 16.0;
+    this.target = new THREE.Vector3(0, 0.72, 0);
+    this.distance = 5.2;
+    this.minDistance = 2.8;
+    this.maxDistance = 14.0;
 
-    this.yaw = 0; // Horizontal orbit angle (radians)
-    this.pitch = 0.35; // Vertical orbit angle (radians)
-    this.minPitch = -0.15;
+    this.yaw = Math.PI - 0.22; // Over-the-right-shoulder 3/4 cinematic angle
+    this.pitch = 0.38; // 22 degrees downward elevation showing full body and tail
+    this.minPitch = -0.10;
     this.maxPitch = 1.25;
 
-    this.smoothPos = new THREE.Vector3(0, 5, 10);
+    this.smoothPos = new THREE.Vector3(0, 2.8, -5);
     this.desiredPos = new THREE.Vector3();
     this.targetLookAt = new THREE.Vector3();
     this.baseFov = 60;
@@ -66,8 +66,8 @@ export class GameCamera {
   }
 
   update(delta, playerPos, isSprinting, isPouncing, isStalking = false) {
-    // Follow player chest (dips lower in stalking mode for predator prowl perspective)
-    this.targetLookAt.set(playerPos.x, playerPos.y + (isStalking ? 1.25 : 1.6), playerPos.z);
+    // Follow player center (dips lower in stalking mode for predator prowl perspective)
+    this.targetLookAt.set(playerPos.x, playerPos.y + (isStalking ? 0.55 : 0.72), playerPos.z);
     this.target.lerp(this.targetLookAt, delta * 10);
 
     // Dynamic cinematic distance: pulls in close when stalking, pulls back when sprinting
