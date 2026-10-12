@@ -23,6 +23,10 @@ import { buzz, HAPTIC } from './haptics.js';
 import { Tutorial } from './tutorial.js';
 import { APP_VERSION, APP_BUILD } from './version.js';
 import { World, env } from './world.js';
+import { Territory, MARK_INCOME } from './territory.js';
+import { Scavengers } from './scavengers.js';
+import { buildCamp } from './camp.js';
+import { HERDER_CAMP } from './prey.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -106,6 +110,10 @@ class Game {
     this.world.onPhaseChange = (phase) => this.onPhaseChange(phase);
     this.world.onWeatherChange = (weather) => this.onWeatherChange(weather);
     this.world.onNewDay = (day) => this.onNewDay(day);
+    buildCamp(this.scene, this.terrain, HERDER_CAMP);
+    this.territory = new Territory(this);
+    this.scavengers = new Scavengers(this.scene, this.terrain);
+    this.scavengers.onFirstVisit = () => this.announce('🦅 Scavengers are circling a kill! Drag kills into cover by a rock or tree to cache them.', '#fde68a');
 
     // Track state
     this.pounceHasHit = false;
@@ -213,12 +221,13 @@ class Game {
 
   // Everything about this leopard's world that should survive a restart (stored in the leopard save)
   worldState() {
-    return { clock: this.world.serialize() };
+    return { clock: this.world.serialize(), marks: this.territory.serialize() };
   }
 
   restoreWorldState(state) {
     if (!state || typeof state !== 'object') return;
     this.world.restore(state.clock);
+    this.territory.restore(state.marks);
   }
 
   // Returns true if a saved game was resumed
@@ -253,7 +262,90 @@ class Game {
   }
 
   onNewDay(day) {
+    const income = this.territory.dailyIncome();
+    if (income > 0) {
+      this.addCurrency({ pelts: income });
+      this.announce(`🏔️ Your territory yields +${income} 🐾`, '#c4b5fd');
+    }
     this.saveGame();
+  }
+
+  // ------------------------------------------------------------------ drag & cache kills
+  canDrag(c) {
+    return c && c.isDead && c.meatAmount > 0 && !c.isBoss && !c.isPredator && !c.dragged;
+  }
+
+  startDrag(carcass) {
+    this.dragging = carcass;
+    carcass.dragged = true;
+    carcass.cached = false;
+    this.player.dragging = true;
+    this.player.isSprinting = false;
+    this.input.isSprinting = false;
+    carcass.updateSprite('🦴', '#0d9488');
+  }
+
+  updateDrag(delta) {
+    const c = this.dragging;
+    if (!c) return;
+    if (!c.isDead || c.meatAmount <= 0 || !this.preyManager.preyList.includes(c)) {
+      this.stopDrag();
+      return;
+    }
+    const p = this.player;
+    const x = p.position.x + Math.sin(p.facingAngle) * 1.7;
+    const z = p.position.z + Math.cos(p.facingAngle) * 1.7;
+    const ground = this.terrain.getSurfaceHeight(x, z);
+    c.position.set(x, ground, z);
+    c.mesh.position.set(x, ground - c.cfg.drop, z);
+    c.mesh.rotation.y = p.facingAngle + Math.PI / 2;
+    c.deadTimer = Math.max(0, c.deadTimer - delta); // doesn't spoil while carried
+  }
+
+  // Cover = within reach of a boulder or tree
+  nearCover(pos) {
+    const rock = this.terrain.nearestObstacle(pos, 'rock');
+    const tree = this.terrain.nearestObstacle(pos, 'tree');
+    return rock.gap < 3 || tree.gap < 2.5;
+  }
+
+  stopDrag(cache = false) {
+    const c = this.dragging;
+    this.dragging = null;
+    this.player.dragging = false;
+    if (!c) return;
+    c.dragged = false;
+    if (!cache) {
+      c.updateSprite('🍖', '#22c55e');
+      return;
+    }
+    c.cached = true;
+    c.deadTimer = 0;
+    c.updateSprite('🪨', '#0f766e');
+    this.questEvent('cache');
+    this.announce('🪨 Kill cached! It keeps far longer and scavengers can\'t find it.', '#99f6e4');
+    sounds.playChuff();
+  }
+
+  // ------------------------------------------------------------------ scent marking
+  markRock(index) {
+    const p = this.player;
+    p.finisherTimer = 1.1;
+    p.playAction('ProwlIdle', 0.15, true);
+    setTimeout(() => {
+      this.territory.mark(index);
+      p.addXp(15);
+      this.questEvent('mark');
+      const n = this.territory.freshCount();
+      this.announce(`🐾 Boulder marked! Territory: ${n} (+${n * MARK_INCOME} 🐾 each dawn)`, '#d8b4fe');
+      this.saveGame();
+    }, 700);
+  }
+
+  // Everything an attack can hit: animals plus a rival leopard
+  targets() {
+    const rival = this.territory.rival;
+    return rival && !rival.isDead ? [...this.preyManager.preyList, rival] : this.preyManager.preyList;
   }
 
   // Rest in a den: skip to dawn (or 4 hours by day), fully heal, get a little hungrier
@@ -295,8 +387,20 @@ class Game {
     if (pinned && !pinned.isDead && pinned.pinnedTimer > 0 && pinned.position.distanceTo(this.player.position) < 5) {
       acts.push({ id: 'bite', icon: '🦷', label: 'Bite', urgent: true, run: () => this.throatBite(pinned) });
     }
-    const { den, distance } = this.terrain.nearestDen(this.player.position);
+    const pos = this.player.position;
+    if (this.dragging) {
+      if (this.nearCover(this.dragging.position)) acts.push({ id: 'cache', icon: '🪨', label: 'Cache', run: () => this.stopDrag(true) });
+      else acts.push({ id: 'drop', icon: '⬇️', label: 'Drop', run: () => this.stopDrag(false) });
+      return acts;
+    }
+    const { den, distance } = this.terrain.nearestDen(pos);
     if (den && distance < 5) acts.push({ id: 'rest', icon: '💤', label: 'Rest', run: () => this.startRest(den) });
+    let carcass = null;
+    for (const p of this.preyManager.preyList) if (this.canDrag(p) && p.position.distanceTo(pos) < 3.8) carcass = p;
+    if (carcass) acts.push({ id: 'drag', icon: '🦴', label: 'Drag', run: () => this.startDrag(carcass) });
+    const rock = this.territory.markableRock(pos);
+    if (rock) acts.push({ id: 'mark', icon: '🐾', label: 'Mark', run: () => this.markRock(rock.index) });
+    if (this.extraContextActions) acts.push(...this.extraContextActions());
     return acts;
   }
 
@@ -1125,7 +1229,7 @@ class Game {
     const forward = new THREE.Vector3(Math.sin(this.player.facingAngle), 0, Math.cos(this.player.facingAngle));
     const toPrey = new THREE.Vector3();
 
-    for (const prey of this.preyManager.preyList) {
+    for (const prey of this.targets()) {
       if (prey.isDead || prey.hidden || prey.airborne) continue;
       toPrey.subVectors(prey.position, this.player.position);
       const dist = toPrey.length();
@@ -1434,6 +1538,9 @@ class Game {
     // 6. Update Interactions (Feed carcass, toggles)
     this.updateInteractionPrompts();
     this.updateContextAction();
+    this.updateDrag(delta);
+    this.territory.update(delta);
+    this.scavengers.update(delta, this.preyManager.preyList, this.player.position);
 
     // 7. Update Scent Vision Trails & Pulse
     this.scentVision.update(delta, this.player.position, this.preyManager.preyList);

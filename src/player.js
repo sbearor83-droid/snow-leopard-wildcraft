@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { sounds } from './audio.js';
 import { shortestAngleDiff, isMobileDevice } from './utils.js';
 import { SLOTS, ACCESSORY_BY_ID } from './accessories.js';
@@ -135,6 +136,10 @@ export class SnowLeopard {
 
   onModelLoaded(gltf) {
     const model = gltf.scene;
+    // Untouched copy for other leopards (rival, mate, cubs), taken before fur shells and
+    // accessories are added to this one
+    this.npcTemplate = cloneSkinned(model);
+    this.animationClips = gltf.animations || [];
 
     model.traverse((child) => {
       if (!child.isSkinnedMesh) return;
@@ -476,7 +481,7 @@ export class SnowLeopard {
 
   // Locomotion & Actions
   pounce() {
-    if (this.isPouncing || this.pounceCooldown > 0 || this.stamina < 20 || this.isDowned) return false;
+    if (this.isPouncing || this.pounceCooldown > 0 || this.stamina < 20 || this.isDowned || this.dragging) return false;
 
     // Ambush from above: leaping down from a ledge goes further and lands far harder
     const ahead = 7;
@@ -690,6 +695,7 @@ export class SnowLeopard {
       }
     }
 
+    if (this.dragging) isSprintInput = false; // hauling a kill in your jaws
     if (isSprintInput && isMoving && this.stamina > 5 && !this.isStalking && !this.isDowned) {
       this.isSprinting = true;
       this.stamina = Math.max(0, this.stamina - delta * 22);
@@ -711,6 +717,7 @@ export class SnowLeopard {
       if (this.isStalking) targetSpeed = this.stalkSpeed;
       else if (this.isSprinting) targetSpeed = this.sprintSpeed;
       else targetSpeed = this.walkSpeed;
+      if (this.dragging) targetSpeed *= 0.6;
     }
 
     this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, targetSpeed, delta * 8);

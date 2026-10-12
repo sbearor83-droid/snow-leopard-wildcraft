@@ -16,7 +16,7 @@ export const CURRENCY = {
 };
 
 // Pelts for each kill
-export const PREY_PELTS = { hare: 10, ibex: 20, bharal: 20, marmot: 8, pika: 5, snowcock: 6, goat: 5, yak: 100, wolf: 25, dog: 15 };
+export const PREY_PELTS = { hare: 10, ibex: 20, bharal: 20, marmot: 8, pika: 5, snowcock: 6, goat: 5, yak: 100, wolf: 25, dog: 15, rival: 40 };
 
 // Treasure that has no new accessory left to give pays out this instead
 export const SPARE_TREASURE_PELTS = 40;
