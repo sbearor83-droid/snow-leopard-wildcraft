@@ -24,6 +24,7 @@ export class MountainEnvironment {
     this.createDriftingMist();
     this.createPawTracksSystem();
     this.createSnowWeather();
+    this.createDens();
   }
 
   // Smooth multi-octave height function for mountain ridges and valleys
@@ -926,8 +927,88 @@ vec3 snowHash3(vec2 p) {
     this.scene.add(this.snowParticles);
   }
 
+  // Weather from world.js: `fraction` of snowflakes falling (0..1), `storm` blizzard strength (0..1)
+  setWeather(fraction, storm) {
+    if (!this.snowParticles) return;
+    const count = this.snowParticles.geometry.attributes.position.count;
+    this.snowParticles.geometry.setDrawRange(0, Math.round(count * THREE.MathUtils.clamp(fraction, 0.1, 1)));
+    this.windMult = 1 + storm * 2.6;
+    this.snowParticles.material.size = 0.32 + storm * 0.22;
+    this.snowParticles.material.opacity = 0.8 + storm * 0.15;
+  }
+
+  // ------------------------------------------------------------------ dens
+  // A few big boulders have a rocky hollow at their base where the leopard can rest
+  // (and where cubs are born). Visual: a dark cave mouth facing the valley centre.
+  createDens() {
+    this.dens = [];
+    const candidates = this.obstacles
+      .map((o, index) => ({ ...o, index }))
+      .filter((o) => o.kind === 'rock' && o.radius > 2.6 && Math.hypot(o.x, o.z) > 35 && Math.hypot(o.x, o.z) < 140)
+      .sort((a, b) => b.radius - a.radius);
+    for (const c of candidates) {
+      if (this.dens.every((d) => Math.hypot(d.x - c.x, d.z - c.z) > 70)) this.dens.push(c);
+      if (this.dens.length >= 3) break;
+    }
+    const caveMat = new THREE.MeshStandardMaterial({ color: 0x15181f, roughness: 1, metalness: 0 });
+    const lipMat = new THREE.MeshStandardMaterial({ color: 0x5c626d, roughness: 0.95 });
+    for (const d of this.dens) {
+      // mouth faces the middle of the valley
+      const ang = Math.atan2(-d.x, -d.z);
+      const mx = d.x + Math.sin(ang) * d.radius * 0.82;
+      const mz = d.z + Math.cos(ang) * d.radius * 0.82;
+      const group = new THREE.Group();
+      group.position.set(mx, this.getTerrainHeight(mx, mz) - 0.15, mz);
+      group.rotation.y = ang;
+      const mouth = new THREE.Mesh(new THREE.SphereGeometry(1.6, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), caveMat);
+      mouth.scale.set(1.25, 1.05, 0.55);
+      group.add(mouth);
+      const lip = new THREE.Mesh(new THREE.TorusGeometry(1.95, 0.32, 8, 18, Math.PI), lipMat);
+      lip.scale.set(1.0, 0.9, 0.7);
+      lip.position.z = 0.25;
+      lip.castShadow = true;
+      group.add(lip);
+      this.scene.add(group);
+      d.mouth = new THREE.Vector3(mx + Math.sin(ang) * 1.8, 0, mz + Math.cos(ang) * 1.8);
+      d.mouth.y = this.getTerrainHeight(d.mouth.x, d.mouth.z);
+    }
+  }
+
+  nearestDen(pos) {
+    let best = null;
+    let bestD = Infinity;
+    for (const d of this.dens) {
+      const dist = Math.hypot(d.mouth.x - pos.x, d.mouth.z - pos.z);
+      if (dist < bestD) {
+        bestD = dist;
+        best = d;
+      }
+    }
+    return { den: best, distance: bestD };
+  }
+
+  // Nearest big boulder (scent-marking spot, camouflage, caching cover). Returns { obstacle, index, gap }
+  // where gap is the distance from `pos` to the boulder's edge.
+  nearestObstacle(pos, kind = null) {
+    let best = null;
+    let bestIndex = -1;
+    let bestGap = Infinity;
+    for (let i = 0; i < this.obstacles.length; i++) {
+      const o = this.obstacles[i];
+      if (kind && o.kind !== kind) continue;
+      const gap = Math.hypot(o.x - pos.x, o.z - pos.z) - o.radius;
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = o;
+        bestIndex = i;
+      }
+    }
+    return { obstacle: best, index: bestIndex, gap: bestGap };
+  }
+
   update(delta, playerPos) {
     this.time += delta;
+    const wind = this.windMult || 1;
     if (this.skyDome) {
       this.skyDome.position.x = playerPos.x;
       this.skyDome.position.z = playerPos.z;
@@ -941,11 +1022,11 @@ vec3 snowHash3(vec2 p) {
     this.snowParticles.position.x = playerPos.x;
     this.snowParticles.position.z = playerPos.z;
     const pos = this.snowParticles.geometry.attributes.position;
-    const gust = Math.sin(this.time * 0.7) * 0.6;
+    const gust = Math.sin(this.time * 0.7) * 0.6 * wind;
     for (let i = 0; i < pos.count; i++) {
-      let py = pos.getY(i) + this.snowVelocities[i * 3 + 1] * delta * 4;
-      let px = pos.getX(i) + (this.snowVelocities[i * 3] + gust) * delta * 4;
-      let pz = pos.getZ(i) + this.snowVelocities[i * 3 + 2] * delta * 4;
+      let py = pos.getY(i) + this.snowVelocities[i * 3 + 1] * delta * 4 * (1 + (wind - 1) * 0.3);
+      let px = pos.getX(i) + (this.snowVelocities[i * 3] * wind + gust) * delta * 4;
+      let pz = pos.getZ(i) + this.snowVelocities[i * 3 + 2] * wind * delta * 4;
       if (py < -5) {
         py = 35 + Math.random() * 5;
         px = (Math.random() - 0.5) * 120;

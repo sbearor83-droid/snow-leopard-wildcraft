@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { sounds } from './audio.js';
+import { env } from './world.js';
 
 // Scent trail colour per prey type (RGB 0-1)
 const TRAIL_COLORS = {
@@ -133,7 +134,7 @@ export class ScentVision {
       let p = null;
       while (preyIdx < preyList.length) {
         const candidate = preyList[preyIdx++];
-        if (!candidate.isDead && candidate.position.distanceTo(playerPos) < 120) {
+        if (!candidate.isDead && !candidate.hidden && candidate.position.distanceTo(playerPos) < env.scentRange) {
           p = candidate;
           break;
         }

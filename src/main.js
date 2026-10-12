@@ -22,6 +22,7 @@ import { settings, onSettingsChange, updateSettings, QUALITY_LEVELS } from './se
 import { buzz, HAPTIC } from './haptics.js';
 import { Tutorial } from './tutorial.js';
 import { APP_VERSION, APP_BUILD } from './version.js';
+import { World, env } from './world.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -101,6 +102,10 @@ class Game {
     this.input = new InputManager(this.gameCam);
     this.scentVision = new ScentVision(this.scene);
     this.treasures = new TreasureManager(this.scene, this.terrain);
+    this.world = new World({ scene: this.scene, terrain: this.terrain, renderer: this.renderer, sunLight: this.sunLight, rimLight: this.rimLight, hemiLight: this.hemiLight });
+    this.world.onPhaseChange = (phase) => this.onPhaseChange(phase);
+    this.world.onWeatherChange = (weather) => this.onWeatherChange(weather);
+    this.world.onNewDay = (day) => this.onNewDay(day);
 
     // Track state
     this.pounceHasHit = false;
@@ -195,7 +200,17 @@ class Game {
     // Don't snapshot the death screen; the save from just before death is kept instead.
     // Also skip while a new game reloads the page, or the pagehide save would undo the reset.
     if (this.player.isDowned || this.isResetting) return;
-    writeSave(this.player, this.difficulty);
+    writeSave(this.player, this.difficulty, this.worldState());
+  }
+
+  // Everything about this leopard's world that should survive a restart (stored in the leopard save)
+  worldState() {
+    return { clock: this.world.serialize() };
+  }
+
+  restoreWorldState(state) {
+    if (!state || typeof state !== 'object') return;
+    this.world.restore(state.clock);
   }
 
   // Returns true if a saved game was resumed
@@ -203,6 +218,7 @@ class Game {
     const save = readSave();
     if (!save) return false;
     this.player.restoreProgress(save.player);
+    this.restoreWorldState(save.world);
     this.lastLevelSeen = this.player.level;
     this.setDifficulty(save.difficulty, false);
     this.spawnFloatingText(`Welcome back! Lv ${this.player.level}`, '#38bdf8', {
@@ -210,6 +226,80 @@ class Game {
       y: 110
     });
     return true;
+  }
+
+  // ------------------------------------------------------------------ day, night & weather
+  announce(text, color = '#fde68a') {
+    this.spawnFloatingText(text, color, { x: window.innerWidth * 0.5, y: window.innerHeight * 0.32 });
+  }
+
+  onPhaseChange(phase) {
+    if (phase === 'dawn') this.announce('🌅 Dawn: the best hunting light. Prey see you less.');
+    else if (phase === 'dusk') this.announce('🌇 Dusk: twilight hunting time.');
+    else if (phase === 'night') this.announce('🌙 Night falls. Rest in a den, or hunt by moonlight.', '#c7d2fe');
+  }
+
+  onWeatherChange(weather) {
+    if (weather === 'blizzard') this.announce('🌨️ Blizzard! Prey can barely see, hear or smell you.', '#e0f2fe');
+    else if (weather === 'clear') this.announce('☀️ The sky clears.', '#e0f2fe');
+  }
+
+  onNewDay(day) {
+    this.saveGame();
+  }
+
+  // Rest in a den: skip to dawn (or 4 hours by day), fully heal, get a little hungrier
+  startRest(den) {
+    if (this.resting) return;
+    this.resting = true;
+    this.setPaused(true);
+    this.player.position.set(den.mouth.x, den.mouth.y, den.mouth.z);
+    this.player.facingAngle = Math.atan2(den.x - den.mouth.x, den.z - den.mouth.z) + Math.PI;
+    this.player.playAction('ProwlIdle', 0.4, true);
+    this.restOverlay.classList.add('show');
+    setTimeout(() => this.finishRest(), 2400);
+  }
+
+  finishRest() {
+    const w = this.world;
+    const hours = w.isNight || w.phase === 'dusk' ? w.hoursUntilDawn() : 4;
+    w.skipHours(hours);
+    const p = this.player;
+    p.hp = p.maxHp;
+    p.stamina = p.maxStamina;
+    p.hunger = Math.max(15, p.hunger - hours * 1.2);
+    this.restOverlay.classList.remove('show');
+    this.resting = false;
+    this.setPaused(false);
+    this.announce(`💤 Rested ${Math.round(hours)} h. Fully healed. ${w.label()}`, '#a7f3d0');
+    this.afterRest(hours);
+    this.saveGame();
+  }
+
+  // Hook for systems that react to resting (cubs, quests)
+  afterRest() {}
+
+  // ------------------------------------------------------------------ context action
+  // One button (R key) whose job depends on the situation. Highest priority first.
+  contextActions() {
+    const acts = [];
+    const { den, distance } = this.terrain.nearestDen(this.player.position);
+    if (den && distance < 5) acts.push({ id: 'rest', icon: '💤', label: 'Rest', run: () => this.startRest(den) });
+    return acts;
+  }
+
+  updateContextAction() {
+    const act = this.player.isDowned ? null : this.contextActions()[0] || null;
+    this.setStyle(this.btnAct, 'display', act ? 'flex' : 'none');
+    if (act) {
+      this.setText(this.actIcon, act.icon);
+      this.setText(this.actLabel, act.label);
+      this.btnAct.classList.toggle('urgent', Boolean(act.urgent));
+    }
+    if (this.input.isActRequested) {
+      this.input.isActRequested = false;
+      if (act) act.run();
+    }
   }
 
   // ------------------------------------------------------------------ settings
@@ -788,8 +878,8 @@ class Game {
 
   setupLighting() {
     // Hemispherical Ambient Light (azure alpine sky + warm snow ground reflection)
-    const hemiLight = new THREE.HemisphereLight(0x9ec4ea, 0xe4ebf1, 0.95);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0x9ec4ea, 0xe4ebf1, 0.95);
+    this.scene.add(this.hemiLight);
 
     // Directional Alpine Sun Light with Crisp Shadows
     this.sunLight = new THREE.DirectionalLight(0xfff3dc, 2.3);
@@ -853,6 +943,12 @@ class Game {
 
     // Treasure & wardrobe
     this.btnDig = document.getElementById('btn-dig');
+    this.btnAct = document.getElementById('btn-act');
+    this.actIcon = document.getElementById('act-icon');
+    this.actLabel = document.getElementById('act-label');
+    this.restOverlay = document.getElementById('rest-overlay');
+    this.worldText = document.getElementById('world-text');
+    this.denRadarText = document.getElementById('den-radar-text');
     this.treasurePopup = document.getElementById('treasure-popup');
     this.treasureCard = document.getElementById('treasure-card');
     this.treasureIcon = document.getElementById('treasure-icon');
@@ -1206,6 +1302,14 @@ class Game {
       this.setStyle(this.treasureRadarText, 'color', RARITIES[revealed.treasure.rarity].color);
     }
 
+    // Time of day & weather; point to the nearest den at night or when hurt
+    this.setText(this.worldText, this.world.label());
+    const wantDen = this.world.isNight || player.hp < player.maxHp * 0.4;
+    const { den, distance: denDist } = this.terrain.nearestDen(player.position);
+    const showDen = wantDen && den && denDist > 5;
+    this.setStyle(this.denRadarText, 'display', showDen ? 'block' : 'none');
+    if (showDen) this.setText(this.denRadarText, `💤 Den (${Math.round(denDist)}m)`);
+
     // Quest tracker
     this.setText(this.questStats, `Hunted: ${player.preyHunted} | Fed: ${player.meatConsumed} kg`);
   }
@@ -1246,8 +1350,8 @@ class Game {
       }
     }
 
-    // 3. Keep Sun Light & Rim Light following player for sharp shadow map coverage
-    this.sunLight.position.set(this.player.position.x + 65, 85, this.player.position.z + 45);
+    // 3. Sun / moon and sky follow the clock; the light stays centred on the player for sharp shadows
+    this.world.update(delta, this.player.position);
     this.sunLight.target.position.copy(this.player.position);
     this.sunLight.target.updateMatrixWorld();
 
@@ -1274,6 +1378,7 @@ class Game {
 
     // 6. Update Interactions (Feed carcass, toggles)
     this.updateInteractionPrompts();
+    this.updateContextAction();
 
     // 7. Update Scent Vision Trails & Pulse
     this.scentVision.update(delta, this.player.position, this.preyManager.preyList);

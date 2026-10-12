@@ -102,11 +102,13 @@ function migrate(data) {
   return data;
 }
 
-export function buildSave(player, difficulty) {
+// `world` holds the rest of this leopard's progress (clock, quests, territory, family; see main.js)
+export function buildSave(player, difficulty, world = {}) {
   return {
     version: SAVE_VERSION,
     savedAt: Date.now(),
     difficulty,
+    world,
     player: {
       level: player.level,
       xp: player.xp,
@@ -122,10 +124,10 @@ export function buildSave(player, difficulty) {
   };
 }
 
-export function writeSave(player, difficulty) {
+export function writeSave(player, difficulty, world) {
   if (writesFrozen) return false;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(buildSave(player, difficulty)));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(buildSave(player, difficulty, world)));
     markLocalWrite();
     return true;
   } catch (e) {

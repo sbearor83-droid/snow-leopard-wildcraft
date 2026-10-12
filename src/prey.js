@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { sounds } from './audio.js';
 import { lerpAngle } from './utils.js';
 import { buildTube, smoothPath, makeFurTextures, fbm3 } from './procgen.js';
+import { env } from './world.js';
 
 // Carcasses that are never fully eaten rot away after this many seconds
 const CARCASS_LIFETIME = 90;
@@ -723,9 +724,10 @@ export class PreyAnimal {
     let hearingDistance = 14 * perceptionMult;
     if (player.isSprinting) hearingDistance = 38 * perceptionMult;
     else if (player.isStalking) hearingDistance = 6.5 * perceptionMult; // Sneak reward!
+    hearingDistance *= env.hearing; // blizzard wind masks footsteps
 
-    // Sight: prey sees forward cone (~120 deg) further than back
-    let sightDistance = 42 * perceptionMult;
+    // Sight: prey sees forward cone (~120 deg) further than back; darkness and snowstorms cut it
+    let sightDistance = 42 * perceptionMult * env.sight;
     const inSightCone = angleToPlayer < (Math.PI * 0.65);
     const canSee = inSightCone && distToPlayer < (player.isStalking ? sightDistance * 0.45 : sightDistance);
     const canHear = distToPlayer < hearingDistance;
