@@ -33,6 +33,7 @@ const RUN_ENTER_SPEED = 8.0; // m/s: Walk/ProwlWalk -> Run
 const RUN_EXIT_SPEED = 6.5; // m/s: Run -> Walk/ProwlWalk (gap avoids flicker)
 const SPRINT_RUN_SPEED = 4.5; // m/s: with sprint on, Run from here so speeding up never plays a fast walk
 const MAX_GAIT_RATE = 2.4; // cap on clip playback speed while the leopard speeds up or slows down
+const AMBUSH_MIN_DROP = 2.2; // metres the landing spot must lie below the leopard for an ambush
 
 // Snow Leopard player: skinned 3D model, skeletal animation state machine & wildcraft survival stats
 export class SnowLeopard {
@@ -75,6 +76,12 @@ export class SnowLeopard {
     this.isSwiping = false;
     this.pounceTimer = 0;
     this.pounceDuration = 0.70;
+    this.pounceLength = 0.70; // this pounce's duration (longer for a cliff ambush)
+    this.pounceSpeed = 22.0;
+    this.pounceArc = 2.8;
+    this.isAmbush = false; // leapt down from higher ground
+    this.camo = 0; // 0..1: how well the coat blends into the rocks right now
+    this.finisherTimer = 0; // throat bite in progress (leopard holds still)
     this.pounceCooldown = 0;
     this.swipeTimer = 0;
     this.swipeDuration = 0.32;
@@ -471,8 +478,19 @@ export class SnowLeopard {
   pounce() {
     if (this.isPouncing || this.pounceCooldown > 0 || this.stamina < 20 || this.isDowned) return false;
 
+    // Ambush from above: leaping down from a ledge goes further and lands far harder
+    const ahead = 7;
+    const ax = this.position.x + Math.sin(this.facingAngle) * ahead;
+    const az = this.position.z + Math.cos(this.facingAngle) * ahead;
+    const drop = this.position.y - this.terrain.getSurfaceHeight(ax, az);
+    this.isAmbush = drop > AMBUSH_MIN_DROP;
+    this.pounceLength = this.isAmbush ? 0.9 : this.pounceDuration;
+    this.pounceSpeed = this.isAmbush ? 27 : 22;
+    this.pounceArc = this.isAmbush ? 3.4 : 2.8;
+    if (this.actions.Pounce) this.actions.Pounce.timeScale = this.actions.Pounce.getClip().duration / this.pounceLength;
+
     this.isPouncing = true;
-    this.pounceTimer = this.pounceDuration;
+    this.pounceTimer = this.pounceLength;
     this.pounceCooldown = 1.8;
     this.stamina = Math.max(0, this.stamina - 25);
     this.biteTimer = 0;
@@ -662,7 +680,8 @@ export class SnowLeopard {
     }
 
     this.isStalking = isStalkInput && !this.isDowned;
-    const isMoving = inputDir.lengthSq() > 0.01 && !this.isDowned;
+    if (this.finisherTimer > 0) this.finisherTimer -= delta;
+    const isMoving = inputDir.lengthSq() > 0.01 && !this.isDowned && this.finisherTimer <= 0;
 
     if (this.isPouncing) {
       this.pounceTimer -= delta;
@@ -687,7 +706,7 @@ export class SnowLeopard {
     if (this.isDowned) {
       targetSpeed = 0;
     } else if (this.isPouncing) {
-      targetSpeed = 22.0;
+      targetSpeed = this.pounceSpeed;
     } else if (isMoving) {
       if (this.isStalking) targetSpeed = this.stalkSpeed;
       else if (this.isSprinting) targetSpeed = this.sprintSpeed;
@@ -730,8 +749,8 @@ export class SnowLeopard {
     let targetY = ground.y;
 
     if (this.isPouncing) {
-      const pounceProgress = 1 - (this.pounceTimer / this.pounceDuration);
-      const jumpArc = Math.sin(pounceProgress * Math.PI) * 2.8;
+      const pounceProgress = 1 - (this.pounceTimer / this.pounceLength);
+      const jumpArc = Math.sin(pounceProgress * Math.PI) * this.pounceArc;
       targetY += jumpArc;
     }
 
@@ -748,8 +767,38 @@ export class SnowLeopard {
     this.leanAngle = THREE.MathUtils.lerp(this.leanAngle, targetLean, delta * 6);
     this.modelRoot.rotation.z = this.leanAngle;
 
+    this.updateCamouflage(delta);
     this.updateAnimationState(delta, isMoving);
     this.updateSnowPuffs(delta);
+  }
+
+  // Ghost of the mountains: holding still (or creeping) beside a boulder blends the coat into the
+  // rock. Prey then see the leopard from far less distance. Moving fast breaks it at once.
+  updateCamouflage(delta) {
+    const { gap } = this.terrain.nearestObstacle(this.position, 'rock');
+    const nearRock = gap < 2.5;
+    const slow = this.currentSpeed < (this.isStalking ? 4.2 : 0.6);
+    let target = 0;
+    if (!this.isPouncing && !this.isSprinting && slow) target = nearRock ? 1 : (this.isStalking ? 0.3 : 0);
+    const rate = target > this.camo ? 0.9 : 5;
+    this.camo += (target - this.camo) * Math.min(1, delta * rate);
+  }
+
+  // Throat bite on a pinned animal: the snow leopard's real killing hold
+  throatBite(prey) {
+    if (this.isDowned) return false;
+    this.facingAngle = Math.atan2(prey.position.x - this.position.x, prey.position.z - this.position.z);
+    const clip = this.actions.Finisher || this.actions.Bite;
+    if (clip) {
+      clip.setLoop(THREE.LoopOnce, 1);
+      clip.clampWhenFinished = true;
+      clip.timeScale = clip.getClip().duration / 0.9;
+      this.biteTimer = 0.9;
+      this.playAction(clip === this.actions.Finisher ? 'Finisher' : 'Bite', 0.08, true);
+    }
+    this.finisherTimer = 0.9;
+    sounds.playThroatBite();
+    return true;
   }
 
   // Snow height under the four paws for the current heading -> body height, nose pitch and roll
@@ -785,7 +834,7 @@ export class SnowLeopard {
     } else if (this.isSwiping) {
       this.playAction(this.swipeSide ? 'Attack_Left' : 'Attack_Right', 0.06);
     } else if (this.biteTimer > 0 && !isMoving) {
-      this.playAction('Bite', 0.12);
+      this.playAction(this.finisherTimer > 0 && this.actions.Finisher ? 'Finisher' : 'Bite', 0.12);
     } else if (this.hitTimer > 0 && !isMoving) {
       this.playAction('Hit_Left', 0.05);
     } else if (isMoving) {

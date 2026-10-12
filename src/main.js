@@ -291,6 +291,10 @@ class Game {
   // One button (R key) whose job depends on the situation. Highest priority first.
   contextActions() {
     const acts = [];
+    const pinned = this.pinnedPrey;
+    if (pinned && !pinned.isDead && pinned.pinnedTimer > 0 && pinned.position.distanceTo(this.player.position) < 5) {
+      acts.push({ id: 'bite', icon: '🦷', label: 'Bite', urgent: true, run: () => this.throatBite(pinned) });
+    }
     const { den, distance } = this.terrain.nearestDen(this.player.position);
     if (den && distance < 5) acts.push({ id: 'rest', icon: '💤', label: 'Rest', run: () => this.startRest(den) });
     return acts;
@@ -956,6 +960,7 @@ class Game {
     this.actLabel = document.getElementById('act-label');
     this.restOverlay = document.getElementById('rest-overlay');
     this.worldText = document.getElementById('world-text');
+    this.camoBadge = document.getElementById('camo-badge');
     this.denRadarText = document.getElementById('den-radar-text');
     this.treasurePopup = document.getElementById('treasure-popup');
     this.treasureCard = document.getElementById('treasure-card');
@@ -1133,22 +1138,57 @@ class Game {
       const screenPos = this.getScreenCoords(prey.position);
       this.spawnFloatingText(`${label}! -${damage} HP`, color, screenPos);
 
-      if (prey.isDead) {
-        buzz(HAPTIC.kill);
-        this.tutorial.notify('kill');
-        this.player.preyHunted += 1;
-        const pelts = PREY_PELTS[prey.type] || 0;
-        this.spawnFloatingText(`+${prey.xpReward} XP  +${pelts} 🐾${prey.isBoss ? ' 👑 BOSS SLAIN!' : ''}`, '#a855f7', {
-          x: screenPos.x,
-          y: screenPos.y - 30
-        });
-        this.player.addXp(prey.xpReward);
-        this.addCurrency({ pelts });
-        this.saveGame();
+      if (prey.isDead) this.onPreyKilled(prey, screenPos);
+      else if (label !== 'SWIPE' && !prey.isBoss && !prey.isPredator) {
+        // A pounce that doesn't kill pins the animal: finish it with a throat bite
+        prey.pinnedTimer = 2.2;
+        prey.updateSprite('🦷', '#dc2626');
+        this.pinnedPrey = prey;
       }
       return true;
     }
     return false;
+  }
+
+  // Rewards and bookkeeping for every kill, however it was made
+  onPreyKilled(prey, screenPos = this.getScreenCoords(prey.position), how = '') {
+    buzz(HAPTIC.kill);
+    this.tutorial.notify('kill');
+    if (prey === this.pinnedPrey) this.pinnedPrey = null;
+    this.player.preyHunted += 1;
+    const pelts = PREY_PELTS[prey.type] || 0;
+    const tag = prey.isBoss ? ' 👑 BOSS SLAIN!' : how;
+    this.spawnFloatingText(`+${prey.xpReward} XP  +${pelts} 🐾${tag}`, '#a855f7', { x: screenPos.x, y: screenPos.y - 30 });
+    this.player.addXp(prey.xpReward);
+    this.addCurrency({ pelts });
+    this.questEvent(`kill:${prey.type}`);
+    if (!prey.isPredator && !prey.cfg.livestock) this.questEvent('kill');
+    if (prey.isPredator && prey.type === 'wolf') this.questEvent('wolfDefeat');
+    if (this.player.camo > 0.6 || this.killWasHidden) this.questEvent('camoKill');
+    if (this.world.isTwilight) this.questEvent('twilightKill');
+    if (env.blizzard > 0.5) this.questEvent('blizzardKill');
+    this.killWasHidden = false;
+    this.lastKill = { prey, at: performance.now(), pelts };
+    if (this.afterKill) this.afterKill(prey, pelts);
+    this.saveGame();
+  }
+
+  // Quest progress hook (quests.js)
+  questEvent(name, amount = 1) {
+    if (this.quests) this.quests.event(name, amount);
+  }
+
+  throatBite(prey) {
+    if (!this.player.throatBite(prey)) return;
+    buzz(HAPTIC.bite);
+    prey.pinnedTimer = 1.2; // held fast while the bite lands
+    setTimeout(() => {
+      if (prey.isDead) return;
+      prey.takeDamage(prey.hp + 1);
+      this.spawnFloatingText('🦷 THROAT BITE!', '#f87171', this.getScreenCoords(prey.position));
+      this.questEvent('bite');
+      this.onPreyKilled(prey);
+    }, 450);
   }
 
   checkPounceAttack() {
@@ -1159,8 +1199,13 @@ class Game {
     }
     if (this.pounceHasHit) return;
 
-    // Heavy burst damage
-    this.pounceHasHit = this.strikeNearbyPrey(4.4, 0.35, 1.8, 0.95, 'POUNCE', '#ef4444');
+    // Heavy burst damage; a leap down from a ledge (ambush) hits far harder
+    const ambush = this.player.isAmbush;
+    this.killWasHidden = this.player.camo > 0.6 || this.pounceStartCamo > 0.6;
+    this.pounceHasHit = ambush
+      ? this.strikeNearbyPrey(5.2, 0.3, 2.8, 0.95, '🏔️ AMBUSH', '#f97316')
+      : this.strikeNearbyPrey(4.4, 0.35, 1.8, 0.95, 'POUNCE', '#ef4444');
+    if (this.pounceHasHit && ambush) this.questEvent('ambush');
     if (this.pounceHasHit) this.tutorial.notify('pounceHit');
   }
 
@@ -1237,10 +1282,11 @@ class Game {
     if (treasure && this.input.isDigRequested) this.digTreasure(treasure);
     this.input.isDigRequested = false;
 
-    // Pounce input request
+    // Pounce input request (remember whether it was launched from hiding)
     if (this.input.isPounceRequested) {
       this.input.isPounceRequested = false;
-      this.player.pounce();
+      const camo = this.player.camo;
+      if (this.player.pounce()) this.pounceStartCamo = camo;
     }
 
     // Scent vision input request
@@ -1259,6 +1305,7 @@ class Game {
     this.setBarWidth(this.barHunger, player.hunger, player.maxHunger);
     this.setBarWidth(this.barXp, player.xp, player.xpToNext);
     this.setText(this.hudLevel, `Lv ${player.level}`);
+    this.setStyle(this.camoBadge, 'opacity', player.camo > 0.6 ? '1' : '0');
 
     // Level up check
     if (player.level > this.lastLevelSeen) {
