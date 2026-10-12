@@ -41,6 +41,31 @@ export class MountainEnvironment {
     return h;
   }
 
+  // Height of the snow as actually drawn. The terrain mesh is a grid of flat triangles, so between
+  // grid points it can sit a few centimetres above or below the smooth getTerrainHeight() curve
+  // (more on phones, which use a coarser grid). Anything that must visibly touch the snow uses this.
+  getSurfaceHeight(x, z) {
+    const n = this.gridSegments;
+    if (!n) return this.getTerrainHeight(x, z);
+    const s = this.cellSize;
+    const half = this.halfSize;
+    const ix = Math.min(n - 1, Math.max(0, Math.floor((x + half) / s)));
+    const iz = Math.min(n - 1, Math.max(0, Math.floor((z + half) / s)));
+    const x0 = -half + ix * s;
+    const z0 = -half + iz * s;
+    const u = Math.min(1, Math.max(0, (x - x0) / s));
+    const v = Math.min(1, Math.max(0, (z - z0) / s));
+    // Same split as THREE.PlaneGeometry: triangles (a,b,d) and (b,c,d), diagonal from b to d
+    const hb = this.getTerrainHeight(x0, z0 + s);
+    const hd = this.getTerrainHeight(x0 + s, z0);
+    if (u + v <= 1) {
+      const ha = this.getTerrainHeight(x0, z0);
+      return ha + (hd - ha) * u + (hb - ha) * v;
+    }
+    const hc = this.getTerrainHeight(x0 + s, z0 + s);
+    return hc + (hb - hc) * (1 - u) + (hd - hc) * (1 - v);
+  }
+
   getTerrainNormal(x, z, target = new THREE.Vector3()) {
     const delta = 0.5;
     const hL = this.getTerrainHeight(x - delta, z);
@@ -222,6 +247,8 @@ export class MountainEnvironment {
 
   createTerrain() {
     const segments = IS_MOBILE ? 160 : 240;
+    this.gridSegments = segments;
+    this.cellSize = this.worldSize / segments;
     const geometry = new THREE.PlaneGeometry(this.worldSize, this.worldSize, segments, segments);
     geometry.rotateX(-Math.PI / 2);
 

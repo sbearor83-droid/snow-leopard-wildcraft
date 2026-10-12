@@ -4,7 +4,6 @@ import { sounds } from './audio.js';
 import { shortestAngleDiff, isMobileDevice } from './utils.js';
 import { SLOTS, ACCESSORY_BY_ID } from './accessories.js';
 
-const _terrainNormal = new THREE.Vector3();
 const _tmpMat = new THREE.Matrix4();
 
 // Rigged snow leopard model (skinned mesh + 17 skeletal clips, baked rosette coat).
@@ -20,6 +19,20 @@ const CLIP_STRIDE_SPEED = { Walk: 0.926, Run: 2.55, ProwlWalk: 1.82 };
 // Fur shell rendering (extruded alpha-tested copies of the skinned mesh)
 const FUR_SHELLS = isMobileDevice() ? 5 : 10;
 const FUR_LENGTH = 0.019; // model units before scaling (~6 cm in-game)
+
+// Where the paws rest relative to the leopard's origin (metres, +Z forward, +X to its left).
+// The body is tilted and lifted so the plane through these four points lies on the snow.
+const PAW_FRONT_Z = 0.72;
+const PAW_BACK_Z = -0.56;
+const PAW_HALF_WIDTH = 0.25;
+const MAX_BODY_TILT = 0.7; // rad, a little steeper than the steepest walkable slope
+
+// Gait follows the leopard's real speed, not which buttons are held, so switching between
+// sprint, walk and stalk never plays a slow-gait clip at sprint speed (legs blurring).
+const RUN_ENTER_SPEED = 8.0; // m/s: Walk/ProwlWalk -> Run
+const RUN_EXIT_SPEED = 6.5; // m/s: Run -> Walk/ProwlWalk (gap avoids flicker)
+const SPRINT_RUN_SPEED = 4.5; // m/s: with sprint on, Run from here so speeding up never plays a fast walk
+const MAX_GAIT_RATE = 2.4; // cap on clip playback speed while the leopard speeds up or slows down
 
 // Snow Leopard player: skinned 3D model, skeletal animation state machine & wildcraft survival stats
 export class SnowLeopard {
@@ -74,6 +87,8 @@ export class SnowLeopard {
 
     // Scene root for the leopard (position / heading / slope alignment)
     this.mesh = new THREE.Group();
+    this.mesh.rotation.order = 'YXZ'; // heading first, then pitch and roll in the leopard's own frame
+    this.locomotionClip = 'Walk';
     this.scene.add(this.mesh);
 
     // Scaled root for the loaded model
@@ -708,8 +723,10 @@ export class SnowLeopard {
     this.position.x = THREE.MathUtils.clamp(this.position.x, -maxBound, maxBound);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -maxBound, maxBound);
 
-    const groundY = this.terrain.getTerrainHeight(this.position.x, this.position.z);
-    let targetY = groundY;
+    // Plant the paws: sample the drawn snow under each paw, then tilt and lift the body so all four
+    // touch it. Height is set directly (no smoothing lag), so the paws don't hover when running downhill.
+    const ground = this.sampleGroundUnderPaws();
+    let targetY = ground.y;
 
     if (this.isPouncing) {
       const pounceProgress = 1 - (this.pounceTimer / this.pounceDuration);
@@ -717,14 +734,12 @@ export class SnowLeopard {
       targetY += jumpArc;
     }
 
-    this.position.y = THREE.MathUtils.lerp(this.position.y, targetY, delta * 18);
+    this.position.y = targetY;
     this.mesh.position.copy(this.position);
     this.mesh.rotation.y = this.facingAngle;
-
-    // Orient gently along the mountain slope
-    const norm = this.terrain.getTerrainNormal(this.position.x, this.position.z, _terrainNormal);
-    this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, (norm.z * 0.4), delta * 8);
-    this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, (-norm.x * 0.4), delta * 8);
+    const tiltBlend = Math.min(1, delta * 14);
+    this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, ground.pitch, tiltBlend);
+    this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, ground.roll, tiltBlend);
 
     // Bank into fast turns
     const speedFactor = THREE.MathUtils.clamp(this.currentSpeed / this.sprintSpeed, 0, 1);
@@ -734,6 +749,26 @@ export class SnowLeopard {
 
     this.updateAnimationState(delta, isMoving);
     this.updateSnowPuffs(delta);
+  }
+
+  // Snow height under the four paws for the current heading -> body height, nose pitch and roll
+  sampleGroundUnderPaws() {
+    const sin = Math.sin(this.facingAngle);
+    const cos = Math.cos(this.facingAngle);
+    const { x, z } = this.position;
+    const at = (lx, lz) => this.terrain.getSurfaceHeight(x + lx * cos + lz * sin, z + lz * cos - lx * sin);
+    const fl = at(PAW_HALF_WIDTH, PAW_FRONT_Z);
+    const fr = at(-PAW_HALF_WIDTH, PAW_FRONT_Z);
+    const bl = at(PAW_HALF_WIDTH, PAW_BACK_Z);
+    const br = at(-PAW_HALF_WIDTH, PAW_BACK_Z);
+    const front = (fl + fr) / 2;
+    const back = (bl + br) / 2;
+    const span = PAW_FRONT_Z - PAW_BACK_Z;
+    return {
+      y: back + (front - back) * (-PAW_BACK_Z / span), // plane height under the leopard's origin
+      pitch: THREE.MathUtils.clamp(Math.atan2(back - front, span), -MAX_BODY_TILT, MAX_BODY_TILT), // + = nose down
+      roll: THREE.MathUtils.clamp(Math.atan2((fl + bl) - (fr + br), 4 * PAW_HALF_WIDTH), -MAX_BODY_TILT, MAX_BODY_TILT)
+    };
   }
 
   updateAnimationState(delta, isMoving) {
@@ -753,13 +788,19 @@ export class SnowLeopard {
     } else if (this.hitTimer > 0 && !isMoving) {
       this.playAction('Hit_Left', 0.05);
     } else if (isMoving) {
-      const name = this.isStalking ? 'ProwlWalk' : (this.isSprinting ? 'Run' : 'Walk');
+      // Pick the gait from the actual speed so a slow clip is never played at sprint speed
+      // (while sprinting, break into the run as soon as the leopard is moving at all briskly)
+      const runThreshold = this.isSprinting ? SPRINT_RUN_SPEED : (this.locomotionClip === 'Run' ? RUN_EXIT_SPEED : RUN_ENTER_SPEED);
+      let name;
+      if (this.currentSpeed > runThreshold) name = 'Run';
+      else name = this.isStalking ? 'ProwlWalk' : 'Walk';
+      this.locomotionClip = name;
       this.playAction(name, 0.22);
       const action = this.actions[name];
       if (action) {
-        // Lock the paws to the ground: playback rate follows actual ground speed exactly
+        // Lock the paws to the ground: playback rate follows ground speed (capped during speed changes)
         const plantedSpeed = CLIP_STRIDE_SPEED[name] * MODEL_SCALE;
-        action.timeScale = Math.max(0.35, this.currentSpeed / plantedSpeed);
+        action.timeScale = THREE.MathUtils.clamp(this.currentSpeed / plantedSpeed, 0.35, MAX_GAIT_RATE);
       }
     } else {
       this.biteTimer = 0;
