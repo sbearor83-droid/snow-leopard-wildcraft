@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "148053120593",
+    "project_id": "snow-leopard-world",
+    "storage_bucket": "snow-leopard-world.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:148053120593:android:8a582e355416637a344a70",
+        "android_client_info": {
+          "package_name": "com.snowleopardworld.game"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "148053120593-8hc6e3fthsvqfciuhe5re0q4j8bl46t8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqeWqR-fWoN3aiHPP8Wq0gFuiCPbsbQH8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "148053120593-8hc6e3fthsvqfciuhe5re0q4j8bl46t8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
