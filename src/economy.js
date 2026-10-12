@@ -30,6 +30,8 @@ export const PRICES = {
 };
 
 export const DAILY_OFFER_COUNT = 4;
+export const MAX_OFFER_REFRESHES = 2; // per day, each for one rewarded ad
+export const DOUBLE_PELTS_COOLDOWN = 90; // seconds between "double Pelts" ad offers after kills
 
 // Daily login reward, by day of the streak (day 7 is the big one, then it starts over)
 export const STREAK_REWARDS = [
@@ -94,8 +96,9 @@ function seededRng(seedText) {
 
 // Today's rotating offers: up to DAILY_OFFER_COUNT unowned accessories that sell for Pelts
 // (Crystal-only items live in their own always-available shop row)
-export function dailyOffers(owned, today = dayKey()) {
-  const rng = seededRng(`offers-${today}`);
+// `reroll` > 0 gives a fresh set (watching an ad in the shop refreshes the offers)
+export function dailyOffers(owned, today = dayKey(), reroll = 0) {
+  const rng = seededRng(reroll ? `offers-${today}-${reroll}` : `offers-${today}`);
   const shuffled = [...ACCESSORIES].sort(() => rng() - 0.5);
   return shuffled.filter((a) => PRICES[a.rarity].pelts && !owned.has(a.id)).slice(0, DAILY_OFFER_COUNT);
 }

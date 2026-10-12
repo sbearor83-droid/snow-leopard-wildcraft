@@ -10,7 +10,8 @@
 //   - only the cloud changed        -> take the cloud copy
 //   - both changed (two phones, or a phone that never synced with this
 //     account, e.g. a new phone)    -> merge:
-//       items, find dates, book rewards, Remove Ads: union (nothing is lost)
+//       items, coat colours, find dates, book rewards, Remove Ads, starter
+//       pack: union (nothing is lost)
 //       Pelts / Crystals: cloud + what this device earned or spent since the
 //                         last sync (so nothing is counted twice)
 //       daily streak / stash: whichever is from the later day
@@ -46,6 +47,11 @@ function mergeDaily(local = {}, remote = {}) {
   daily.stashDay = laterDay(local.stashDay, remote.stashDay) ?? null;
   if (local.stashDay === remote.stashDay) daily.stashFound = Math.max(local.stashFound || 0, remote.stashFound || 0);
   else daily.stashFound = (daily.stashDay === local.stashDay ? local.stashFound : remote.stashFound) || 0;
+  // Once-a-day ad rewards: a bonus chest, and shop offer refreshes
+  daily.bonusChestDay = laterDay(local.bonusChestDay, remote.bonusChestDay) ?? null;
+  daily.rerollDay = laterDay(local.rerollDay, remote.rerollDay) ?? null;
+  if (local.rerollDay === remote.rerollDay) daily.rerolls = Math.max(local.rerolls || 0, remote.rerolls || 0);
+  else daily.rerolls = (daily.rerollDay === local.rerollDay ? local.rerolls : remote.rerolls) || 0;
   return daily;
 }
 
@@ -78,7 +84,10 @@ export function mergeProfiles(localJson, remoteJson, baseWallet = ZERO_WALLET) {
     goldPrints: local.goldPrints ?? remote.goldPrints,
     wallet,
     daily: mergeDaily(local.daily, remote.daily),
-    removeAds: Boolean(local.removeAds || remote.removeAds)
+    removeAds: Boolean(local.removeAds || remote.removeAds),
+    coats: [...new Set([...(remote.coats || []), ...(local.coats || [])])], // coat colours owned on either device
+    coat: local.coat || remote.coat || 'natural', // keep this device's current look
+    starterPack: Boolean(local.starterPack || remote.starterPack)
   });
 }
 

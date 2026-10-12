@@ -156,6 +156,7 @@ export class SnowLeopard {
     if (this.skinnedMesh) this.createFurShells(this.skinnedMesh);
     this.addWhiskers();
     for (const slot of Object.keys(this.equipped)) this.attachAccessory(slot);
+    if (this.coatTint !== undefined) this.setCoat(this.coatTint);
 
     if (gltf.animations && gltf.animations.length > 0) {
       this.mixer = new THREE.AnimationMixer(model);
@@ -347,6 +348,14 @@ export class SnowLeopard {
     }
     headBone.add(whiskers);
     this.whiskers = whiskers;
+  }
+
+  // Coat colour: tints the baked coat (base layer and every fur shell)
+  setCoat(tint) {
+    this.coatTint = tint;
+    if (!this.skinnedMesh) return; // applied when the model finishes loading
+    this.skinnedMesh.material.color.setHex(tint);
+    for (const shell of this.furShells || []) shell.material.color.setHex(tint);
   }
 
   // Wears (or with a null id, removes) the accessory for a slot

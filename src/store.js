@@ -20,7 +20,9 @@ export const BILLING_ENABLED = false;
 
 // Prices shown here are placeholders; with billing on, show the localized
 // price string the store returns instead.
+// grants: crystals, pelts, coat (a coat colour id), removeAds. oneTime products disappear once bought.
 export const PRODUCTS = [
+  { id: 'starter_pack', name: 'Starter Pack', icon: '🎁', grants: { crystals: 150, pelts: 1500, coat: 'golden' }, price: '$1.99', tag: 'One-time offer', oneTime: true },
   { id: 'crystals_small', name: 'Handful of Crystals', icon: '💎', grants: { crystals: 80 }, price: '$0.99' },
   { id: 'crystals_medium', name: 'Pouch of Crystals', icon: '💎', grants: { crystals: 450 }, price: '$4.99', tag: 'Popular' },
   { id: 'crystals_large', name: 'Chest of Crystals', icon: '💎', grants: { crystals: 1000 }, price: '$9.99', tag: 'Best value' },

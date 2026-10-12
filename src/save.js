@@ -183,8 +183,11 @@ export function readCollection(validIds) {
     milestones: [],
     goldPrints: true,
     wallet: { pelts: 0, crystals: 0 },
-    daily: { lastLoginDay: null, streak: 0, stashDay: null, stashFound: 0 },
-    removeAds: false
+    daily: { lastLoginDay: null, streak: 0, stashDay: null, stashFound: 0, bonusChestDay: null, rerollDay: null, rerolls: 0 },
+    removeAds: false,
+    coats: new Set(['natural']),
+    coat: 'natural',
+    starterPack: false
   };
   let data;
   try {
@@ -215,8 +218,14 @@ export function readCollection(validIds) {
   const wallet = { pelts: count(w.pelts), crystals: count(w.crystals) };
   const d = data.daily || {};
   const day = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
-  const daily = { lastLoginDay: day(d.lastLoginDay), streak: count(d.streak), stashDay: day(d.stashDay), stashFound: count(d.stashFound) };
-  return { owned, equipped, foundAt, milestones, goldPrints, wallet, daily, removeAds: data.removeAds === true };
+  const daily = {
+    lastLoginDay: day(d.lastLoginDay), streak: count(d.streak), stashDay: day(d.stashDay), stashFound: count(d.stashFound),
+    bonusChestDay: day(d.bonusChestDay), rerollDay: day(d.rerollDay), rerolls: count(d.rerolls)
+  };
+  // Coat colours (validated against coats.js by the caller)
+  const coats = new Set(['natural', ...(Array.isArray(data.coats) ? data.coats.filter((c) => typeof c === 'string') : [])]);
+  const coat = typeof data.coat === 'string' && coats.has(data.coat) ? data.coat : 'natural';
+  return { owned, equipped, foundAt, milestones, goldPrints, wallet, daily, removeAds: data.removeAds === true, coats, coat, starterPack: data.starterPack === true };
 }
 
 export function writeCollection(collection) {
@@ -231,7 +240,10 @@ export function writeCollection(collection) {
       goldPrints: collection.goldPrints,
       wallet: collection.wallet,
       daily: collection.daily,
-      removeAds: collection.removeAds
+      removeAds: collection.removeAds,
+      coats: [...collection.coats],
+      coat: collection.coat,
+      starterPack: collection.starterPack
     }));
     markLocalWrite();
   } catch (e) {

@@ -27,6 +27,8 @@ import { Territory, MARK_INCOME } from './territory.js';
 import { Scavengers } from './scavengers.js';
 import { buildCamp } from './camp.js';
 import { Quests } from './quests.js';
+import { COATS, COAT_BY_ID } from './coats.js';
+import { DOUBLE_PELTS_COOLDOWN, MAX_OFFER_REFRESHES } from './economy.js';
 import { Family } from './family.js';
 import { HERDER_CAMP } from './prey.js';
 
@@ -515,6 +517,11 @@ class Game {
   // ------------------------------------------------------------------ accessories
   loadCollection() {
     this.collection = readCollection(new Set(Object.keys(ACCESSORY_BY_ID)));
+    // drop coat colours that no longer exist, then wear the chosen one
+    this.collection.coats = new Set([...this.collection.coats].filter((id) => COAT_BY_ID[id]));
+    this.collection.coats.add('natural');
+    if (!this.collection.coats.has(this.collection.coat)) this.collection.coat = 'natural';
+    this.player.setCoat(COAT_BY_ID[this.collection.coat].tint);
     for (const [slot, id] of Object.entries(this.collection.equipped)) {
       if (SLOTS[slot] && ACCESSORY_BY_ID[id].slot === slot) this.player.setAccessory(slot, id);
       else delete this.collection.equipped[slot];
@@ -588,7 +595,7 @@ class Game {
 
   revealTreasure(treasure) {
     this.treasures.collect(treasure);
-    if (treasure.daily) {
+    if (treasure.daily && !treasure.bonus) {
       this.collection.daily.stashFound += 1;
       writeCollection(this.collection);
     }
@@ -759,6 +766,20 @@ class Game {
   renderWardrobe() {
     this.wardrobeProgress.textContent = `${this.collection.owned.size} / ${ACCESSORIES.length} found`;
     this.wardrobeSlots.replaceChildren();
+    // coat colours first
+    const coatTitle = this.el('div', 'wardrobe-slot-title', 'Coat');
+    const coatGrid = this.el('div', 'wardrobe-items');
+    for (const coat of COATS) {
+      const owned = this.collection.coats.has(coat.id);
+      const btn = this.el('button', 'wardrobe-item', '', this.coatSwatch(coat), this.el('span', '', owned ? coat.name : '???'),
+        this.el('span', 'item-rarity', this.collection.coat === coat.id ? 'Wearing' : owned ? 'Coat' : 'In the shop'));
+      btn.classList.toggle('locked', !owned);
+      btn.classList.toggle('equipped', this.collection.coat === coat.id);
+      if (owned) btn.addEventListener('click', () => { this.wearCoat(coat.id); this.renderWardrobe(); });
+      else btn.disabled = true;
+      coatGrid.append(btn);
+    }
+    this.wardrobeSlots.append(coatTitle, coatGrid);
     for (const [slot, info] of Object.entries(SLOTS)) {
       const title = document.createElement('div');
       title.className = 'wardrobe-slot-title';
@@ -957,13 +978,43 @@ class Game {
     const hours = Math.floor(left / 3600000);
     const mins = Math.floor((left % 3600000) / 60000);
     body.append(this.el('div', 'shop-section-title', '', this.el('span', '', "Today's offers"), this.el('small', '', `New offers in ${hours}h ${mins}m`)));
-    const offers = dailyOffers(this.collection.owned);
+    const d = this.collection.daily;
+    const today = dayKey();
+    const rerolls = d.rerollDay === today ? d.rerolls : 0;
+    const offers = dailyOffers(this.collection.owned, today, rerolls);
     if (offers.length) {
       const grid = this.el('div', 'shop-grid');
       for (const item of offers) grid.append(this.shopItemCard(item, PRICES[item.rarity]));
       body.append(grid);
     } else {
       body.append(this.el('div', 'shop-empty', 'You own every accessory! New items are coming soon.'));
+    }
+
+    // Free stuff for watching an ad (only when an ad is ready)
+    if (ads.canShowRewarded) {
+      body.append(this.el('div', 'shop-section-title', '', this.el('span', '', '📺 Free with a short video'), this.el('small', '', 'Optional')));
+      const adGrid = this.el('div', 'shop-grid');
+      const chestUsed = d.bonusChestDay === today;
+      adGrid.append(this.adCard('🎁', 'Bonus treasure chest', chestUsed ? 'Come back tomorrow' : 'A Rare-or-better chest, buried nearby', chestUsed, () => this.adBonusChest()));
+      const refreshLeft = MAX_OFFER_REFRESHES - rerolls;
+      adGrid.append(this.adCard('🔄', 'New shop offers', refreshLeft > 0 ? `${refreshLeft} left today` : 'Come back tomorrow', refreshLeft <= 0, () => this.adRefreshOffers()));
+      body.append(adGrid);
+    }
+
+    // Coat colours
+    const coatsForSale = COATS.filter((c) => c.price && !this.collection.coats.has(c.id));
+    if (coatsForSale.length) {
+      body.append(this.el('div', 'shop-section-title', '', this.el('span', '', '🎨 Coat colours'), this.el('small', '', 'Wear them from the Wardrobe')));
+      const coatGrid = this.el('div', 'shop-grid');
+      for (const coat of coatsForSale) {
+        const card = this.el('div', 'shop-item', '', this.coatSwatch(coat), this.el('span', '', coat.name), this.el('span', 'item-rarity', 'Coat colour'));
+        const btn = this.el('button', 'buy-btn', formatPrice(coat.price));
+        btn.disabled = !canAfford(this.collection.wallet, coat.price);
+        btn.addEventListener('click', () => this.buyCoat(coat));
+        card.append(btn);
+        coatGrid.append(card);
+      }
+      body.append(coatGrid);
     }
 
     // Premium: every Epic & Legendary item not owned yet, for Snow Crystals
@@ -980,10 +1031,15 @@ class Game {
     const grid = this.el('div', 'shop-grid');
     for (const product of PRODUCTS) {
       if (product.grants.removeAds && this.collection.removeAds) continue;
+      if (product.oneTime && this.collection.starterPack) continue;
+      const g = product.grants;
+      const what = g.removeAds
+        ? 'No more forced ads'
+        : [g.pelts && `${g.pelts} 🐾`, g.crystals && `${g.crystals} 💎`, g.coat && `${COAT_BY_ID[g.coat].name} coat`].filter(Boolean).join(' + ');
       const card = this.el('div', 'shop-item', '',
         this.el('span', 'item-icon', product.icon),
         this.el('span', '', product.name),
-        this.el('span', 'item-rarity', product.grants.crystals ? `${product.grants.crystals} crystals` : 'No more ads'));
+        this.el('span', 'item-rarity', what));
       if (product.tag) card.append(this.el('span', 'tag', product.tag));
       const btn = this.el('button', 'buy-btn', BILLING_ENABLED ? product.price : 'Coming soon');
       btn.disabled = !BILLING_ENABLED;
@@ -992,6 +1048,92 @@ class Game {
       grid.append(card);
     }
     body.append(grid);
+  }
+
+  // ------------------------------------------------------------------ coats & ad rewards
+  coatSwatch(coat) {
+    const sw = this.el('span', 'coat-swatch', coat.icon);
+    sw.style.background = `#${coat.tint.toString(16).padStart(6, '0')}`;
+    return sw;
+  }
+
+  buyCoat(coat) {
+    if (this.collection.coats.has(coat.id) || !canAfford(this.collection.wallet, coat.price)) return;
+    for (const [cur, amount] of Object.entries(coat.price)) this.collection.wallet[cur] -= amount;
+    this.collection.coats.add(coat.id);
+    this.wearCoat(coat.id);
+    this.updateWalletHUD();
+    sounds.playTreasureFound();
+    this.shopStatus = `✅ ${coat.icon} ${coat.name} coat bought and on! Change it any time in the Wardrobe.`;
+    this.renderShop();
+  }
+
+  wearCoat(id) {
+    if (!this.collection.coats.has(id)) return;
+    this.collection.coat = id;
+    this.player.setCoat(COAT_BY_ID[id].tint);
+    writeCollection(this.collection);
+  }
+
+  adCard(icon, name, note, disabled, onClick) {
+    const card = this.el('div', 'shop-item', '', this.el('span', 'item-icon', icon), this.el('span', '', name), this.el('span', 'item-rarity', note));
+    const btn = this.el('button', 'buy-btn', '📺 Watch');
+    btn.disabled = disabled;
+    btn.addEventListener('click', onClick);
+    card.append(btn);
+    return card;
+  }
+
+  // Shows a rewarded ad; resolves true if the player earned the reward
+  async watchAd() {
+    sounds.setSuspended(true);
+    const earned = await ads.showRewarded();
+    sounds.setSuspended(false);
+    return earned;
+  }
+
+  async adBonusChest() {
+    if (!(await this.watchAd())) return;
+    this.collection.daily.bonusChestDay = dayKey();
+    writeCollection(this.collection);
+    if (this.treasures.spawn(this.player.position, { daily: true, minRarity: 'rare' })) {
+      this.treasures.treasures[this.treasures.treasures.length - 1].bonus = true;
+    }
+    this.shopStatus = '🎁 A bonus chest is buried nearby! Use 👃 Scent to find it.';
+    this.renderShop();
+  }
+
+  async adRefreshOffers() {
+    if (!(await this.watchAd())) return;
+    const d = this.collection.daily;
+    const today = dayKey();
+    d.rerolls = d.rerollDay === today ? d.rerolls + 1 : 1;
+    d.rerollDay = today;
+    writeCollection(this.collection);
+    this.shopStatus = '🔄 New offers!';
+    this.renderShop();
+  }
+
+  // After a kill worth a few Pelts, briefly offer to double them for a video (opt-in, rate-limited)
+  afterKill(prey, pelts) {
+    if (pelts < 10 || !ads.canShowRewarded) return;
+    const now = performance.now();
+    if (this.lastDoubleOffer && now - this.lastDoubleOffer < DOUBLE_PELTS_COOLDOWN * 1000) return;
+    this.lastDoubleOffer = now;
+    this.doublePelts = pelts;
+    this.adOffer.querySelector('span').textContent = `📺 Double it: +${pelts} 🐾`;
+    this.adOffer.classList.add('show');
+    clearTimeout(this.adOfferTimer);
+    this.adOfferTimer = setTimeout(() => this.adOffer.classList.remove('show'), 7000);
+  }
+
+  async claimDoublePelts() {
+    this.adOffer.classList.remove('show');
+    const pelts = this.doublePelts;
+    this.doublePelts = 0;
+    if (!pelts || !(await this.watchAd())) return;
+    this.addCurrency({ pelts });
+    this.announce(`📺 Thanks! +${pelts} 🐾`, '#fde68a');
   }
 
   buyAccessory(item, price) {
@@ -1013,11 +1155,11 @@ class Game {
   async buyProduct(product) {
     const grants = await purchase(product.id);
     if (!grants) return;
-    if (grants.crystals) this.addCurrency({ crystals: grants.crystals });
-    if (grants.removeAds) {
-      this.collection.removeAds = true;
-      writeCollection(this.collection);
-    }
+    if (grants.crystals || grants.pelts) this.addCurrency({ crystals: grants.crystals || 0, pelts: grants.pelts || 0 });
+    if (grants.coat && COAT_BY_ID[grants.coat]) this.collection.coats.add(grants.coat);
+    if (product.oneTime) this.collection.starterPack = true;
+    if (grants.removeAds) this.collection.removeAds = true;
+    writeCollection(this.collection);
     this.shopStatus = `✅ Thank you! ${product.name} added.`;
     this.renderShop();
   }
@@ -1093,6 +1235,8 @@ class Game {
     // Treasure & wardrobe
     this.btnDig = document.getElementById('btn-dig');
     this.btnAct = document.getElementById('btn-act');
+    this.adOffer = document.getElementById('ad-offer');
+    this.adOffer.addEventListener('click', () => this.claimDoublePelts());
     this.actIcon = document.getElementById('act-icon');
     this.actLabel = document.getElementById('act-label');
     this.restOverlay = document.getElementById('rest-overlay');
@@ -1615,5 +1759,6 @@ window.addEventListener('DOMContentLoaded', () => {
     // Handy for debugging in the browser console
     window.__game = game;
     window.__cloud = cloud;
+    window.__ads = ads;
   }
 });

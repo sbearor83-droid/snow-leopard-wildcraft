@@ -50,7 +50,7 @@ t('nothing changed: nothing to do', () => {
 t('daily: later login wins, same-day stash takes max', () => {
   const a = prof({ daily: { lastLoginDay: '2026-10-11', streak: 3, stashDay: '2026-10-11', stashFound: 1 } });
   const b = prof({ daily: { lastLoginDay: '2026-10-09', streak: 6, stashDay: '2026-10-11', stashFound: 2 } });
-  assert.deepEqual(JSON.parse(mergeProfiles(a, b)).daily, { lastLoginDay: '2026-10-11', streak: 3, stashDay: '2026-10-11', stashFound: 2 });
+  assert.deepEqual(JSON.parse(mergeProfiles(a, b)).daily, { lastLoginDay: '2026-10-11', streak: 3, stashDay: '2026-10-11', stashFound: 2, bonusChestDay: null, rerollDay: null, rerolls: 0 });
 });
 t('foundAt keeps earliest, removeAds sticks', () => {
   const m = JSON.parse(mergeProfiles(prof({ owned: ['a'], foundAt: { a: 50 } }), prof({ owned: ['a'], foundAt: { a: 20 }, removeAds: true })));
@@ -59,4 +59,16 @@ t('foundAt keeps earliest, removeAds sticks', () => {
 t('wallet never goes negative', () => {
   const m = JSON.parse(mergeProfiles(prof({ wallet: { pelts: 0, crystals: 0 } }), prof({ wallet: { pelts: 100, crystals: 0 } }), { pelts: 500, crystals: 0 }));
   assert.equal(m.wallet.pelts, 0);
+});
+
+t('coat colours and starter pack survive a merge from both sides', () => {
+  const remote = { profile: prof({ coats: ['natural', 'frost'], coat: 'frost', starterPack: true, daily: { lastLoginDay: '2026-10-10', streak: 2, stashDay: '2026-10-10', stashFound: 1, bonusChestDay: '2026-10-10', rerollDay: '2026-10-10', rerolls: 1 } }), leopard: leo(3, 0), rev: 2 };
+  const local = { profile: prof({ coats: ['natural', 'midnight'], coat: 'midnight', daily: { lastLoginDay: '2026-10-11', streak: 3, stashDay: '2026-10-11', stashFound: 0, bonusChestDay: null, rerollDay: '2026-10-11', rerolls: 2 } }), leopard: leo(2, 0) };
+  const m = JSON.parse(planSync(local, remote, meta({ updatedAt: 9 }), 'u1').result.profile);
+  assert.deepEqual(m.coats.sort(), ['frost', 'midnight', 'natural']);
+  assert.equal(m.coat, 'midnight');
+  assert.equal(m.starterPack, true);
+  assert.equal(m.daily.bonusChestDay, '2026-10-10');
+  assert.equal(m.daily.rerollDay, '2026-10-11');
+  assert.equal(m.daily.rerolls, 2);
 });
