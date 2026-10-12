@@ -1357,3 +1357,6 @@ html, body {
   transition: opacity 0.4s;
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------------ family line on the quest card */
+.family-text { display: none; margin-top: 4px; font-size: 11px; font-weight: 700; color: #f9a8d4; }

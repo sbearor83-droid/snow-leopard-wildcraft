@@ -26,6 +26,8 @@ import { World, env } from './world.js';
 import { Territory, MARK_INCOME } from './territory.js';
 import { Scavengers } from './scavengers.js';
 import { buildCamp } from './camp.js';
+import { Quests } from './quests.js';
+import { Family } from './family.js';
 import { HERDER_CAMP } from './prey.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
@@ -113,6 +115,8 @@ class Game {
     buildCamp(this.scene, this.terrain, HERDER_CAMP);
     this.territory = new Territory(this);
     this.scavengers = new Scavengers(this.scene, this.terrain);
+    this.quests = new Quests((q) => this.onQuestComplete(q), () => this.renderQuest());
+    this.family = new Family(this);
     this.scavengers.onFirstVisit = () => this.announce('🦅 Scavengers are circling a kill! Drag kills into cover by a rock or tree to cache them.', '#fde68a');
 
     // Track state
@@ -150,6 +154,7 @@ class Game {
     // Resume saved progress, then keep saving automatically
     this.loadCollection();
     this.loadGame();
+    this.renderQuest();
     // New players (and anyone who quit before finishing it) get the tutorial
     if (!Tutorial.isDone() && this.player.preyHunted === 0 && this.player.level === 1) this.tutorial.start();
     // Catch up on book rewards earned before milestones existed (needs the loaded XP)
@@ -221,13 +226,33 @@ class Game {
 
   // Everything about this leopard's world that should survive a restart (stored in the leopard save)
   worldState() {
-    return { clock: this.world.serialize(), marks: this.territory.serialize() };
+    return { clock: this.world.serialize(), marks: this.territory.serialize(), quests: this.quests.serialize(), family: this.family.serialize() };
   }
 
   restoreWorldState(state) {
     if (!state || typeof state !== 'object') return;
     this.world.restore(state.clock);
     this.territory.restore(state.marks);
+    this.quests.restore(state.quests);
+    this.family.restore(state.family);
+  }
+
+  // ------------------------------------------------------------------ quests
+  renderQuest() {
+    const q = this.quests.current;
+    this.setText(this.questTitle, q.challenge ? '🌄 Wild challenge' : `Quest ${Math.min(this.quests.index + 1, 16)}: ${q.title}`);
+    this.setText(this.questDesc, q.challenge ? q.title.replace('Wild challenge: ', '') + '. ' + q.desc : q.desc);
+    const unit = q.event === 'eat' ? ' kg' : '';
+    this.setText(this.questStats, this.quests.waiting ? '✅ Complete!' : `Progress: ${Math.floor(this.quests.progress)} / ${q.count}${unit}`);
+  }
+
+  onQuestComplete(q) {
+    this.player.addXp(q.xp);
+    this.addCurrency({ pelts: q.pelts });
+    buzz(HAPTIC.reward);
+    sounds.playTreasureFound();
+    this.showBanner(q.challenge ? 'Challenge complete!' : 'Quest complete!', `${q.title.replace('Wild challenge: ', '')}  +${q.xp} XP  +${q.pelts} 🐾`);
+    this.saveGame();
   }
 
   // Returns true if a saved game was resumed
@@ -262,6 +287,7 @@ class Game {
   }
 
   onNewDay(day) {
+    this.family.onNewDay();
     const income = this.territory.dailyIncome();
     if (income > 0) {
       this.addCurrency({ pelts: income });
@@ -352,6 +378,7 @@ class Game {
   startRest(den) {
     if (this.resting) return;
     this.resting = true;
+    this.restDen = den;
     this.setPaused(true);
     this.player.position.set(den.mouth.x, den.mouth.y, den.mouth.z);
     this.player.facingAngle = Math.atan2(den.x - den.mouth.x, den.z - den.mouth.z) + Math.PI;
@@ -376,8 +403,11 @@ class Game {
     this.saveGame();
   }
 
-  // Hook for systems that react to resting (cubs, quests)
-  afterRest() {}
+  // Systems that react to resting: cubs are born in the den, quests
+  afterRest() {
+    this.family.onRest(this.restDen);
+    this.questEvent('rest');
+  }
 
   // ------------------------------------------------------------------ context action
   // One button (R key) whose job depends on the situation. Highest priority first.
@@ -400,7 +430,7 @@ class Game {
     if (carcass) acts.push({ id: 'drag', icon: '🦴', label: 'Drag', run: () => this.startDrag(carcass) });
     const rock = this.territory.markableRock(pos);
     if (rock) acts.push({ id: 'mark', icon: '🐾', label: 'Mark', run: () => this.markRock(rock.index) });
-    if (this.extraContextActions) acts.push(...this.extraContextActions());
+    if (this.family.canCall()) acts.push({ id: 'call', icon: '📣', label: 'Call', run: () => this.family.callForMate() });
     return acts;
   }
 
@@ -1031,6 +1061,9 @@ class Game {
     this.compassHeading = document.getElementById('compass-heading');
     this.preyRadarText = document.getElementById('prey-radar-text');
     this.questStats = document.getElementById('quest-stats');
+    this.questTitle = document.getElementById('quest-title');
+    this.questDesc = document.getElementById('quest-desc');
+    this.familyText = document.getElementById('family-text');
     this.btnEat = document.getElementById('btn-eat');
     this.btnStalk = document.getElementById('btn-stalk');
     this.btnSprint = document.getElementById('btn-sprint');
@@ -1209,10 +1242,16 @@ class Game {
   }
 
   showLevelUpBanner(level) {
+    this.showBanner('Level Up!', `Level ${level} Reached! Max HP, Stamina, and Attack Boosted!`);
+  }
+
+  showBanner(title, details) {
     if (!this.levelUpBanner) return;
-    this.levelUpDetails.innerText = `Level ${level} Reached! Max HP, Stamina, and Attack Boosted!`;
+    this.levelUpBanner.querySelector('h2').textContent = title;
+    this.levelUpDetails.innerText = details;
     this.levelUpBanner.style.display = 'block';
-    setTimeout(() => {
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = setTimeout(() => {
       this.levelUpBanner.style.display = 'none';
     }, 2800);
   }
@@ -1367,8 +1406,11 @@ class Game {
       // Feed action requested
       if (this.input.isEatRequested) {
         this.input.isEatRequested = false;
+        const kgBefore = this.player.meatConsumed;
         const fed = this.player.eat(nearestCarcass);
         if (fed) {
+          this.questEvent('eat', this.player.meatConsumed - kgBefore);
+          this.family.onEat();
           const screenPos = this.getScreenCoords(this.player.position);
           this.spawnFloatingText(`+Meat! Hunger Restored`, '#22c55e', screenPos);
           this.tutorial.notify('eat');
@@ -1469,8 +1511,13 @@ class Game {
     this.setStyle(this.denRadarText, 'display', showDen ? 'block' : 'none');
     if (showDen) this.setText(this.denRadarText, `💤 Den (${Math.round(denDist)}m)`);
 
-    // Quest tracker
-    this.setText(this.questStats, `Hunted: ${player.preyHunted} | Fed: ${player.meatConsumed} kg`);
+    // Family status (mate / cubs) under the quest
+    const fam = this.family.label();
+    this.setStyle(this.familyText, 'display', fam ? 'block' : 'none');
+    if (fam) {
+      this.setText(this.familyText, fam.text);
+      this.setStyle(this.familyText, 'color', fam.warn ? '#f87171' : '#f9a8d4');
+    }
   }
 
   onResize() {
@@ -1540,6 +1587,7 @@ class Game {
     this.updateContextAction();
     this.updateDrag(delta);
     this.territory.update(delta);
+    this.family.update(delta);
     this.scavengers.update(delta, this.preyManager.preyList, this.player.position);
 
     // 7. Update Scent Vision Trails & Pulse
