@@ -103,5 +103,10 @@ npx cap open android   # then Build > Generate Signed App Bundle / APK in Androi
 
 Ads use Google AdMob (Android app only). See the guide below for switching from test ads to your own ad units.
 
+**Pixel 10 / PowerVR GPUs:** the PowerVR driver in the Pixel 10 family drops the WebGL context when three.js
+renders shadow maps (the screen goes blank a moment after the leopard appears). The game detects those GPUs and
+runs without shadow maps; any other device that loses its GL context is reloaded into the same "safe render" mode
+and remembers it (`localStorage` key `slw.safeRender`).
+
 Release signing reads `android/keystore.properties`, which is git-ignored. See
 [`release-builds/GOOGLE_PLAY_UPLOAD_GUIDE.md`](release-builds/GOOGLE_PLAY_UPLOAD_GUIDE.md) for creating a keystore and uploading to Google Play.

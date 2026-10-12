@@ -7,7 +7,7 @@ import { InputManager } from './controls.js';
 import { ScentVision } from './scent.js';
 import { sounds } from './audio.js';
 import { ads } from './ads.js';
-import { isMobileDevice } from './utils.js';
+import { isMobileDevice, isSafeRenderMode, rememberSafeRenderMode, gpuRendererName, gpuHasShadowMapBug } from './utils.js';
 import { AUTOSAVE_INTERVAL_MS, readSave, writeSave, clearSave, readCollection, writeCollection } from './save.js';
 import { ACCESSORIES, ACCESSORY_BY_ID, RARITIES, SLOTS, MILESTONES } from './accessories.js';
 import { TreasureManager, pickReward } from './treasure.js';
@@ -48,16 +48,30 @@ class Game {
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(pixelRatioFor(isMobile));
-    this.renderer.shadowMap.enabled = true;
+
+    // Shadow maps crash the PowerVR driver in the Pixel 10 family (blank canvas a moment after
+    // the first frame), so they stay off there and on any device that already lost its context.
+    const gpuName = gpuRendererName(this.renderer.getContext());
+    this.safeRender = isSafeRenderMode() || gpuHasShadowMapBug(gpuName);
+    if (this.safeRender) console.warn(`Safe render mode (no shadow maps) for GPU: ${gpuName}`);
+    this.renderer.shadowMap.enabled = !this.safeRender;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.container.appendChild(this.renderer.domElement);
 
     // Context loss guards to prevent Android GPU driver freezes
+    this.startedAt = performance.now();
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
       console.warn('WebGL context lost - preventing driver hang.');
+      if (this.safeRender) return; // already running the lightest path; wait for a restore
+      // Drop shadow maps for the restored context and for every launch from now on. If this
+      // happened right after start-up (nothing to lose yet) relaunch straight into safe mode.
+      this.safeRender = true;
+      this.renderer.shadowMap.enabled = false;
+      rememberSafeRenderMode();
+      if (performance.now() - this.startedAt < 30000) location.reload();
     }, false);
     this.renderer.domElement.addEventListener('webglcontextrestored', () => {
       console.info('WebGL context restored.');
