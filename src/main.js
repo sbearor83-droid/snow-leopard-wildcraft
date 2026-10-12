@@ -18,13 +18,21 @@ import {
 import { BILLING_ENABLED, PRODUCTS, purchase } from './store.js';
 import { cloud } from './cloud.js';
 import { reportError, setErrorContext } from './errors.js';
+import { settings, onSettingsChange, updateSettings, QUALITY_LEVELS } from './settings.js';
+import { buzz, HAPTIC } from './haptics.js';
+import { Tutorial } from './tutorial.js';
+import { APP_VERSION, APP_BUILD } from './version.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
 const detectMobile = isMobileDevice;
 
+// Settings > Graphics: Low trades sharpness for frame rate, High the reverse
 function pixelRatioFor(isMobile) {
-  return isMobile ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5);
+  const dpr = window.devicePixelRatio || 1;
+  if (settings.quality === 'low') return isMobile ? 0.75 : 1.0;
+  if (settings.quality === 'high') return Math.min(dpr, isMobile ? 1.5 : 2);
+  return isMobile ? 1.0 : Math.min(dpr, 1.5);
 }
 
 // Main Game Controller
@@ -56,7 +64,7 @@ class Game {
     this.safeRender = isSafeRenderMode() || gpuHasShadowMapBug(gpuName);
     if (this.safeRender) console.warn(`Safe render mode (no shadow maps) for GPU: ${gpuName}`);
     setErrorContext({ gpu: gpuName, safeRender: this.safeRender });
-    this.renderer.shadowMap.enabled = !this.safeRender;
+    this.renderer.shadowMap.enabled = !this.safeRender && settings.quality !== 'low';
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -114,10 +122,15 @@ class Game {
 
     // UI Cache
     this.cacheUIElements();
+    this.setupSettings();
+    this.tutorial = new Tutorial(this);
+    this.player.onHurt = () => buzz(HAPTIC.hurt);
 
     // Resume saved progress, then keep saving automatically
     this.loadCollection();
     this.loadGame();
+    // New players (and anyone who quit before finishing it) get the tutorial
+    if (!Tutorial.isDone() && this.player.preyHunted === 0 && this.player.level === 1) this.tutorial.start();
     // Catch up on book rewards earned before milestones existed (needs the loaded XP)
     const owed = this.claimMilestones();
     if (owed.length) this.spawnFloatingText(`📖 Collection rewards: ${owed.map((m) => m.label).join(', ')}`, '#4ade80', { x: window.innerWidth * 0.5, y: 140 });
@@ -185,9 +198,10 @@ class Game {
     writeSave(this.player, this.difficulty);
   }
 
+  // Returns true if a saved game was resumed
   loadGame() {
     const save = readSave();
-    if (!save) return;
+    if (!save) return false;
     this.player.restoreProgress(save.player);
     this.lastLevelSeen = this.player.level;
     this.setDifficulty(save.difficulty, false);
@@ -195,6 +209,64 @@ class Game {
       x: window.innerWidth * 0.5,
       y: 110
     });
+    return true;
+  }
+
+  // ------------------------------------------------------------------ settings
+  setupSettings() {
+    this.settingsPanel = document.getElementById('settings-panel');
+    document.getElementById('btn-settings').addEventListener('click', () => this.openSettings());
+    document.getElementById('btn-settings-close').addEventListener('click', () => this.closeSettings());
+    this.settingsPanel.addEventListener('click', (e) => {
+      if (e.target === this.settingsPanel) this.closeSettings();
+    });
+    this.startQuality = settings.quality;
+    for (const input of this.settingsPanel.querySelectorAll('[data-setting]')) {
+      const key = input.dataset.setting;
+      const scale = Number(input.dataset.scale || 1);
+      if (input.type === 'checkbox') input.checked = settings[key];
+      else input.value = Math.round(settings[key] * scale);
+      input.addEventListener('input', () => {
+        updateSettings({ [key]: input.type === 'checkbox' ? input.checked : Number(input.value) / scale });
+        if (key === 'vibration' && input.checked) buzz(HAPTIC.hit);
+      });
+    }
+    const qualityButtons = this.settingsPanel.querySelectorAll('[data-quality]');
+    const showQuality = () => {
+      qualityButtons.forEach((b) => b.classList.toggle('active', b.dataset.quality === settings.quality));
+      document.getElementById('btn-restart').style.display = settings.quality !== this.startQuality ? '' : 'none';
+    };
+    qualityButtons.forEach((b) => b.addEventListener('click', () => {
+      if (QUALITY_LEVELS.includes(b.dataset.quality)) updateSettings({ quality: b.dataset.quality });
+      showQuality();
+    }));
+    showQuality();
+    document.getElementById('btn-restart').addEventListener('click', () => {
+      this.saveGame();
+      window.location.reload();
+    });
+    document.getElementById('btn-replay-tutorial').addEventListener('click', () => {
+      this.closeSettings();
+      this.tutorial.replay();
+    });
+    document.getElementById('settings-version').textContent = `Snow Leopard World ${APP_VERSION} (${APP_BUILD})`;
+
+    onSettingsChange((st) => {
+      sounds.setVolumes({ master: st.master, effects: st.effects, ambience: st.ambience });
+      this.gameCam.sensitivity = st.camSensitivity;
+      this.gameCam.invertY = st.invertY;
+    });
+  }
+
+  openSettings() {
+    if (this.player.isDowned) return;
+    this.settingsPanel.style.display = 'flex';
+    this.setPaused(true);
+  }
+
+  closeSettings() {
+    this.settingsPanel.style.display = 'none';
+    this.setPaused(false);
   }
 
   startNewGame() {
@@ -305,6 +377,7 @@ class Game {
     const milestones = this.claimMilestones();
     this.saveGame();
     sounds.playTreasureFound();
+    buzz(HAPTIC.reward);
     this.showTreasurePopup(item, milestones, treasure.daily ? '🎁 Daily stash! 🎁' : undefined);
   }
 
@@ -951,11 +1024,14 @@ class Game {
 
       const damage = Math.round(this.player.attackPower * damageMult * (damageSpread + Math.random() * 0.25));
       prey.takeDamage(damage);
+      buzz(HAPTIC.hit);
 
       const screenPos = this.getScreenCoords(prey.position);
       this.spawnFloatingText(`${label}! -${damage} HP`, color, screenPos);
 
       if (prey.isDead) {
+        buzz(HAPTIC.kill);
+        this.tutorial.notify('kill');
         this.player.preyHunted += 1;
         const pelts = PREY_PELTS[prey.type] || 0;
         this.spawnFloatingText(`+${prey.xpReward} XP  +${pelts} 🐾${prey.isBoss ? ' 👑 BOSS SLAIN!' : ''}`, '#a855f7', {
@@ -981,6 +1057,7 @@ class Game {
 
     // Heavy burst damage
     this.pounceHasHit = this.strikeNearbyPrey(4.4, 0.35, 1.8, 0.95, 'POUNCE', '#ef4444');
+    if (this.pounceHasHit) this.tutorial.notify('pounceHit');
   }
 
   checkSwipeAttack() {
@@ -1041,6 +1118,7 @@ class Game {
         if (fed) {
           const screenPos = this.getScreenCoords(this.player.position);
           this.spawnFloatingText(`+Meat! Hunger Restored`, '#22c55e', screenPos);
+          this.tutorial.notify('eat');
           this.saveGame();
         }
       }
@@ -1082,6 +1160,7 @@ class Game {
     if (player.level > this.lastLevelSeen) {
       this.lastLevelSeen = player.level;
       this.showLevelUpBanner(player.level);
+      buzz(HAPTIC.levelUp);
     }
 
     // Toggle button UI active states
@@ -1207,6 +1286,7 @@ class Game {
 
     // 10. Update UI HUD
     this.updateHUD();
+    this.tutorial.update(delta);
 
     // Render Scene
     this.renderer.render(this.scene, this.camera);

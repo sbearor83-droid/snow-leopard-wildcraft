@@ -600,6 +600,7 @@ export class SnowLeopard {
     if (this.isDowned) return;
     this.hp = Math.max(0, this.hp - amount);
     sounds.playAttackHit();
+    if (this.onHurt) this.onHurt(amount);
 
     if (this.hp <= 0) {
       this.isDowned = true;

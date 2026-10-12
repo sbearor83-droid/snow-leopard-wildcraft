@@ -16,6 +16,7 @@ export class InputManager {
     this.isEatRequested = false;
     this.isDigRequested = false;
     this.isScentRequested = false;
+    this.isActRequested = false; // context action: bite, drag, cache, mark, rest, call
 
     // Mobile Virtual Joystick State
     this.touchJoyActive = false;
@@ -54,6 +55,9 @@ export class InputManager {
       }
       if (e.code === 'KeyV') {
         this.isScentRequested = true;
+      }
+      if (e.code === 'KeyR') {
+        this.isActRequested = true;
       }
     });
 
@@ -115,7 +119,8 @@ export class InputManager {
     window.addEventListener(
       'touchmove',
       (e) => {
-        e.preventDefault();
+        // Menus scroll and their sliders drag natively; everywhere else, block page panning/zoom
+        if (!(e.target && e.target.closest && e.target.closest('.ui-overlay'))) e.preventDefault();
         for (let i = 0; i < e.changedTouches.length; i++) {
           const t = e.changedTouches[i];
 
@@ -184,6 +189,7 @@ export class InputManager {
     this.setupButton('btn-scent', () => (this.isScentRequested = true));
     this.setupButton('btn-eat', () => (this.isEatRequested = true));
     this.setupButton('btn-dig', () => (this.isDigRequested = true));
+    this.setupButton('btn-act', () => (this.isActRequested = true));
   }
 
   setupButton(id, callback) {

@@ -71,7 +71,7 @@
           <button class="menu-btn" id="btn-wardrobe" title="Wear the accessories you've found">🎒 Wardrobe <span id="wardrobe-count">0/0</span></button>
           <button class="menu-btn shop-btn" id="btn-shop" title="Shop">🛒 <span class="wallet-amount" id="hud-pelts">🐾 0</span> <span class="wallet-amount" id="hud-crystals">💎 0</span></button>
           <button class="menu-btn cloud-btn" id="btn-cloud" title="Cloud save" style="display: none;">☁️ <span id="cloud-badge"></span></button>
-          <button class="privacy-btn" id="btn-new-game">New game</button>
+          <button class="menu-btn settings-btn" id="btn-settings" title="Settings" aria-label="Settings">⚙️</button>
         </div>
       </div>
 
@@ -103,13 +103,25 @@
         <div id="joystick-knob"></div>
       </div>
 
+      <!-- Tutorial / hint banner -->
+      <div class="hint-banner" id="hint-banner">
+        <span id="hint-text"></span>
+        <button class="hint-skip" id="btn-hint-skip">Skip</button>
+      </div>
+
       <!-- Controls helper hint for desktop / mobile -->
       <div class="controls-hint">
-        WASD: Move | Shift: Sprint | C: Stalk | Space: Pounce | Q: Swipe | V: Scent | E: Eat / Dig
+        WASD: Move | Shift: Sprint | C: Stalk | Space: Pounce | Q: Swipe | V: Scent | E: Eat / Dig | R: Action
       </div>
 
       <!-- Wildcraft Mobile Action Cluster -->
       <div class="action-cluster">
+        <!-- Context action (bite, drag, cache, mark, rest, call); label set by the game -->
+        <button class="action-btn context-btn" id="btn-act" title="Action">
+          <span id="act-icon">🦷</span>
+          <span class="btn-label" id="act-label">Bite</span>
+        </button>
+
         <button class="action-btn" id="btn-stalk" title="Stalk / Sneak (Silent movement)">
           🐾
           <span class="btn-label">Stalk</span>
@@ -239,6 +251,46 @@
         <div id="wardrobe-slots"></div>
       </div>
       <div id="wardrobe-book" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings-panel" class="ui-overlay">
+    <div class="ui-card wardrobe-card settings-card">
+      <div class="wardrobe-header">
+        <h2>⚙️ Settings</h2>
+        <span class="wardrobe-progress"></span>
+        <button class="wardrobe-close" id="btn-settings-close" aria-label="Close">✕</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-section">🔊 Sound</div>
+        <label class="setting-row"><span>Master volume</span><input type="range" min="0" max="100" step="5" data-setting="master" data-scale="100"></label>
+        <label class="setting-row"><span>Effects &amp; animals</span><input type="range" min="0" max="100" step="5" data-setting="effects" data-scale="100"></label>
+        <label class="setting-row"><span>Wind &amp; weather</span><input type="range" min="0" max="100" step="5" data-setting="ambience" data-scale="100"></label>
+
+        <div class="settings-section">🎥 Camera</div>
+        <label class="setting-row"><span>Look speed</span><input type="range" min="40" max="200" step="10" data-setting="camSensitivity" data-scale="100"></label>
+        <label class="setting-row"><span>Invert up / down</span><input type="checkbox" data-setting="invertY"></label>
+
+        <div class="settings-section">🖥️ Graphics</div>
+        <div class="setting-row">
+          <span>Quality</span>
+          <div class="segmented" id="quality-buttons">
+            <button data-quality="auto">Auto</button>
+            <button data-quality="low">Low</button>
+            <button data-quality="high">High</button>
+          </div>
+        </div>
+        <div class="settings-note" id="quality-note">Low turns off shadows and lowers resolution for smoother play. Applies after a restart. <button class="privacy-btn" id="btn-restart">Restart now</button></div>
+
+        <div class="settings-section">📳 Other</div>
+        <label class="setting-row"><span>Vibration</span><input type="checkbox" data-setting="vibration"></label>
+        <div class="ui-buttons">
+          <button class="death-btn" id="btn-replay-tutorial">Replay tutorial</button>
+          <button class="death-btn" id="btn-new-game">New game</button>
+        </div>
+        <p class="settings-version"><span id="settings-version"></span> · <a href="https://github.com/sbearor83-droid/snow-leopard-wildcraft/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy policy</a></p>
+      </div>
     </div>
   </div>
 

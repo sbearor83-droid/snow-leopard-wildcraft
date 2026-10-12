@@ -19,6 +19,8 @@ export class GameCamera {
     this.minPitch = -0.55; // drag up to look up at the peaks and sky
     this.maxPitch = 1.25;
     this.lookTilt = 0; // extra upward view tilt when terrain stops the camera going as low as asked
+    this.sensitivity = 1; // Settings > Look speed
+    this.invertY = false; // Settings > Invert up / down
 
     this.smoothPos = new THREE.Vector3(0, 3.4, -6.5);
     this.desiredPos = new THREE.Vector3();
@@ -51,8 +53,7 @@ export class GameCamera {
       lastX = e.clientX;
       lastY = e.clientY;
 
-      this.yaw -= dx * 0.005;
-      this.pitch = THREE.MathUtils.clamp(this.pitch + dy * 0.005, this.minPitch, this.maxPitch);
+      this.rotate(dx * 0.005, dy * 0.005);
     });
 
     window.addEventListener('mouseup', () => {
@@ -66,8 +67,13 @@ export class GameCamera {
 
   // Mobile touch drag camera pan (called by touch manager)
   applyTouchPan(dx, dy) {
-    this.yaw -= dx * 0.006;
-    this.pitch = THREE.MathUtils.clamp(this.pitch + dy * 0.006, this.minPitch, this.maxPitch);
+    this.rotate(dx * 0.006, dy * 0.006);
+  }
+
+  rotate(dYaw, dPitch) {
+    this.yaw -= dYaw * this.sensitivity;
+    const pitchStep = dPitch * this.sensitivity * (this.invertY ? -1 : 1);
+    this.pitch = THREE.MathUtils.clamp(this.pitch + pitchStep, this.minPitch, this.maxPitch);
   }
 
   update(delta, playerPos, isSprinting, isPouncing, isStalking = false) {
