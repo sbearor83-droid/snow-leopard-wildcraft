@@ -204,8 +204,8 @@ export class World {
 
     const fog = this.scene.fog;
     fog.color.copy(c.fog).lerp(_ca.copy(BLIZZARD_FOG).multiplyScalar(0.35 + 0.65 * THREE.MathUtils.clamp(sunUp + 0.5, 0, 1)), bz * 0.85);
-    fog.near = THREE.MathUtils.lerp(c.fogNear, 14, bz);
-    fog.far = THREE.MathUtils.lerp(c.fogFar, 120, bz);
+    fog.near = THREE.MathUtils.lerp(c.fogNear, 6, bz);
+    fog.far = THREE.MathUtils.lerp(c.fogFar, 80, bz);
 
     const terrain = this.terrain;
     if (terrain.skyDome) terrain.skyDome.material.color.copy(c.sky).lerp(fog.color, bz * 0.9);

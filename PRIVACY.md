@@ -1,6 +1,6 @@
 # Privacy Policy — Snow Leopard World
 
-_Last updated: October 11, 2026_
+_Last updated: October 12, 2026_
 
 Snow Leopard World is a single-player game. You don't need an account to play, and unless you turn on cloud saves, your progress stays on your device and we collect no personal information.
 
@@ -29,6 +29,10 @@ If you choose **Sign in with Google** in the game's Cloud Save menu, your progre
 This data is used only to save and restore your game. It isn't sold, shared or used for advertising. Google processes it as described at https://firebase.google.com/support/privacy.
 
 You can **delete your cloud save and sign-in account at any time** with **Delete my cloud save** in the Cloud Save menu, or by emailing the contact address on the Google Play listing. Full steps, and what is deleted, are on the [account deletion page](ACCOUNT_DELETION.md). Signing out keeps your cloud save so you can sign in again later.
+
+## Error reports
+
+If the game hits a technical error, it sends a short report to our Google Firebase project so we can fix it: the error message, the game version, your device's browser/system description (which includes the phone model) and the name of its graphics chip. Reports contain no account, name, email or game progress, and are used only to fix bugs.
 
 ## Children
 

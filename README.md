@@ -25,7 +25,8 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 | **Pounce Attack** | `Space` or `F` | 💥 **Pounce** button |
 | **Paw Swipe** | `Q` | 🐾 **Swipe** button |
 | **Scent Vision** | `V` key | 👃 **Scent** button |
-| **Eat / Feed** | `E` key (near downed carcass) | 🍖 **Eat** button |
+| **Eat / Feed / Dig** | `E` key (near a carcass or treasure) | 🍖 **Eat** / ✨ **Dig** button |
+| **Context action** | `R` key | Teal button above the action buttons: 🦷 Bite, 🦴 Drag, 🪨 Cache, ⬇️ Drop, 💤 Rest, 🐾 Mark, 📣 Call |
 
 ---
 
@@ -38,14 +39,38 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 - **RPG Progression:** Successful hunts and meals grant XP. Leveling up permanently increases Max Health, Stamina, and Attack Power!
 
 ### 2. 🦌 Prey AI & Perception
+All animals are defined in the `PREY_TYPES` table in `src/prey.js` (models in `src/wildlife.js`).
+- **Bharal (blue sheep):** the snow leopard's main real prey. Herds that flee uphill onto the crags.
 - **Himalayan Ibex:** Medium prey that graze in herds and sound alarm calls that stampede nearby herd mates.
 - **Snow Hare:** Small, agile winter hare with evasive zigzag fleeing patterns.
+- **Himalayan Marmot:** sits up on sentry, whistles the alarm and dives into its burrow, peeking out again later.
+- **Pika:** darts under the nearest boulder and hides.
+- **Himalayan Snowcock:** bursts into flight and lands further away; can't be caught in the air.
 - **Titan Crag Yak (Boss):** Huge, tough, and charges to ram you when provoked — until it's badly hurt.
-- **Sense System:** Prey react to sight cones and footstep noise (sprinting alerts from far; stalking allows close-range ambush). Spooked prey calm down and return to grazing once they've escaped.
+- **Grey wolves:** a pack that hunts the other animals, feeds on its kills, turns on you near its kill or up close, and retreats when badly hurt.
+- **Herders' camp:** goats graze at a camp guarded by two mastiffs. Take a goat and the dogs come for you (a nod to the real conflict that gets snow leopards killed).
+- **Sense System:** Prey react to sight cones and footstep noise (sprinting alerts from far; stalking allows close-range ambush). Darkness, twilight and blizzards cut how far they see and hear. Spooked prey calm down and return to grazing once they've escaped.
+
+### 🐾 Hunting like a snow leopard
+- **Ghost of the mountains:** hold still (or creep) beside a boulder and the 👻 Hidden badge appears: prey see you from a quarter of the distance.
+- **Ambush from above:** pounce at a spot at least 2.2 m below you for a longer, harder-hitting leap (2.8x damage).
+- **Throat bite:** a pounce that doesn't kill pins the animal for 2.2 s. Tap 🦷 Bite to finish it.
+- **Caching:** drag a kill (🦴) next to a rock or tree and cache it (🪨). Cached kills keep 10 minutes and scavengers ignore them. Kills left in the open draw bearded vultures and ravens.
+- **Territory:** scent-mark boulders (🐾 Mark). Marks stay fresh for 4 in-game days; each dawn pays 3 Pelts per fresh mark. With 3+ marks a rival snow leopard comes to mark over yours: drive it off (`src/territory.js`).
+
+### 🌄 Day, night & weather
+A full day lasts 14 minutes (`src/world.js`). Dawn and dusk are the best hunting light; prey see less at night. Weather drifts between clear, snow and blizzard. A blizzard thickens the fog and wind and shortens how far prey sense you and how far Scent Vision reaches. Rest in one of the three dens (💤) to skip to dawn and heal.
+
+### 🍼 Family
+From level 3, at dusk or night, 📣 Call (a yowl) brings a mate. Stay close until you bond, then rest in a den to give birth to 2-3 cubs. Cubs follow you, share your meals and grow each day they're fed; after 6 days they leave to claim their own range (`src/family.js`, other leopards in `src/npc.js`).
+
+### 📜 Quests
+16 guided quests walk through every behaviour, then endless wild challenges (`src/quests.js`). A first-run tutorial (`src/tutorial.js`) teaches the controls one step at a time.
 
 ### 3. 👃 Scent Vision
 - Triggers a sensory sonar pulse across the snow.
-- Draws scent trails toward nearby living prey (amber: ibex, cyan: hare, red: boss).
+- Draws scent trails toward nearby living prey (amber: ibex, slate blue: bharal, cyan: hare, gold: marmot, pink: pika, lime: snowcock, orange: wolves and dogs, red: boss).
+- Marked boulders glow violet, and buried treasure shoots up a beam.
 - The compass radar shows the nearest prey and its distance.
 
 ### 🐆 Snow Leopard Model
@@ -79,8 +104,17 @@ Vite prints a local URL (http://localhost:5173/) and, because `dev` runs with `-
 - **Real-money products** (Crystal packs, Remove Ads) are listed but show **Coming soon** until Google Play Billing is connected. Setup steps are in `src/store.js`. Nothing is granted without a real purchase.
 - Wallet, purchases and daily progress are kept when you start a New game. Tuning lives in `src/economy.js`.
 
+### ⚙️ Settings
+Volume (master, effects, wind), look speed, invert up/down, graphics quality (Auto / Low / High, applied on restart), vibration, replay tutorial and New game (`src/settings.js`, stored on the device only).
+
+### 🎨 Coat colours & rewarded ads
+Six coat colours (`src/coats.js`) are sold in the shop and worn from the Wardrobe. Optional rewarded videos, only offered when an ad is ready: double the Pelts from a kill, one bonus treasure chest per day, and up to two shop offer refreshes per day. The one-time Starter Pack (`src/store.js`) waits for Google Play Billing like the other real-money products.
+
+### 🐞 Error reports
+JavaScript errors and lost WebGL contexts are sent to the Firestore collection `errorReports` (no personal data; see `src/errors.js`). Read them in the Firebase console under Firestore Database. After changing `firestore.rules`, paste the file into the console's Rules tab and publish.
+
 ### 💾 Saving
-Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position and difficulty are restored on the next launch. **New game** under the difficulty toggle resets the leopard; accessories, Pelts, Crystals and daily progress are kept. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
+Progress saves automatically (every 15 seconds, after each kill, meal, revive or respawn, and whenever the app is backgrounded). Level, XP, vitals, hunt totals, position, difficulty, the time of day, territory marks, quest progress and cubs are restored on the next launch. **New game** under the difficulty toggle resets the leopard; accessories, Pelts, Crystals and daily progress are kept. Saves live on the device (`src/save.js`), so uninstalling the app or clearing its data removes them.
 
 
 ### ☁️ Cloud Saves (off until set up)

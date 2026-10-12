@@ -108,9 +108,33 @@ export class GameCamera {
         break;
       }
     }
+    // Boulders and trees: pull in in front of them, or rise over a boulder hugged up close
+    let riseTo = -Infinity;
+    const flatLen = Math.hypot(dirX, dirZ);
+    if (flatLen > 0.05) {
+      const ux = dirX / flatLen, uz = dirZ / flatLen;
+      const maxFlat = camDist * flatLen;
+      for (const o of this.terrain.obstacles) {
+        const ox = o.x - this.target.x, oz = o.z - this.target.z;
+        const along = ox * ux + oz * uz; // distance along the camera ray (flat)
+        if (along < -o.radius || along > maxFlat + o.radius) continue;
+        const across = Math.abs(ox * uz - oz * ux);
+        const r = o.radius + 0.35;
+        if (across >= r) continue;
+        const entry = along - Math.sqrt(r * r - across * across); // where the ray enters it
+        const top = this.terrain.getTerrainHeight(o.x, o.z) + (o.kind === 'tree' ? 9 : o.kind === 'tent' ? 2.8 : o.radius * 1.05);
+        const camYAtEntry = this.target.y + dirY * (Math.max(0, entry) / flatLen);
+        if (camYAtEntry > top) continue; // the ray passes over it
+        const pulled = entry / flatLen - 0.3;
+        if (pulled >= MIN_PULL_IN) camDist = Math.min(camDist, pulled);
+        else if (o.kind !== 'tree') riseTo = Math.max(riseTo, top + 0.6); // too close: look over the boulder
+      }
+    }
+
     const desiredPos = this.desiredPos.set(this.target.x + dirX * camDist, this.target.y + dirY * camDist, this.target.z + dirZ * camDist);
     const groundAtCam = this.terrain.getTerrainHeight(desiredPos.x, desiredPos.z);
     if (desiredPos.y < groundAtCam + clearance) desiredPos.y = groundAtCam + clearance;
+    if (desiredPos.y < riseTo) desiredPos.y = riseTo;
 
     this.smoothPos.lerp(desiredPos, delta * 12);
     this.camera.position.copy(this.smoothPos);
