@@ -28,7 +28,7 @@ If you choose **Sign in with Google** in the game's Cloud Save menu, your progre
 
 This data is used only to save and restore your game. It isn't sold, shared or used for advertising. Google processes it as described at https://firebase.google.com/support/privacy.
 
-You can **delete your cloud save and sign-in account at any time** with **Delete my cloud save** in the Cloud Save menu, or by opening an issue at the address below and asking us to delete it. Signing out keeps your cloud save so you can sign in again later.
+You can **delete your cloud save and sign-in account at any time** with **Delete my cloud save** in the Cloud Save menu, or by emailing the contact address on the Google Play listing. Full steps, and what is deleted, are on the [account deletion page](ACCOUNT_DELETION.md). Signing out keeps your cloud save so you can sign in again later.
 
 ## Children
 
