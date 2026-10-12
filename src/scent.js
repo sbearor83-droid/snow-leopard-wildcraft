@@ -6,7 +6,14 @@ import { env } from './world.js';
 const TRAIL_COLORS = {
   ibex: [0.96, 0.62, 0.07], // amber
   hare: [0.02, 0.71, 0.83], // cyan
-  yak: [0.94, 0.27, 0.27] // red: dangerous boss
+  yak: [0.94, 0.27, 0.27], // red: dangerous boss
+  bharal: [0.55, 0.66, 0.98], // slate blue
+  marmot: [0.97, 0.8, 0.3], // gold
+  pika: [0.96, 0.6, 0.82], // pink
+  snowcock: [0.62, 0.95, 0.42], // lime
+  goat: [0.95, 0.95, 0.95], // white: livestock
+  wolf: [1.0, 0.42, 0.1], // orange: danger
+  dog: [1.0, 0.42, 0.1]
 };
 
 // Optimized Zero-Allocation Wildcraft Scent Vision & Hunting Radar System

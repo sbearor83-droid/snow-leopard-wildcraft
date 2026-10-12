@@ -130,6 +130,14 @@ class Game {
     this.setupSettings();
     this.tutorial = new Tutorial(this);
     this.player.onHurt = () => buzz(HAPTIC.hurt);
+    this.player.onBitten = (dmg, attacker) => {
+      this.spawnFloatingText(`${attacker.type === 'dog' ? '🐕' : '🐺'} BITTEN! -${dmg} HP`, '#ef4444', this.getScreenCoords(this.player.position));
+      sounds.playHiss();
+    };
+    this.preyManager.onLivestockKilled = () => {
+      this.announce('🐕 The herders saw that! Their mastiffs are coming for you.', '#fca5a5');
+      setTimeout(() => this.announce('Real snow leopards are often killed in revenge for taking livestock.', '#cbd5e1'), 2600);
+    };
 
     // Resume saved progress, then keep saving automatically
     this.loadCollection();
@@ -1113,7 +1121,7 @@ class Game {
     const toPrey = new THREE.Vector3();
 
     for (const prey of this.preyManager.preyList) {
-      if (prey.isDead) continue;
+      if (prey.isDead || prey.hidden || prey.airborne) continue;
       toPrey.subVectors(prey.position, this.player.position);
       const dist = toPrey.length();
       if (dist >= range || forward.dot(toPrey.divideScalar(dist || 1)) <= minDot) continue;
@@ -1281,9 +1289,9 @@ class Game {
     // Nearest Prey Scent Radar
     const { prey, distance } = this.preyManager.getNearestLiving(player.position);
     if (prey) {
-      const name = prey.isBoss ? '👑 Titan Crag Yak (BOSS)' : prey.name;
+      const name = prey.isBoss ? '👑 Titan Crag Yak (BOSS)' : prey.isPredator ? `⚠️ ${prey.name}` : prey.name;
       this.setText(this.preyRadarText, `Scent: ${name} (${Math.round(distance)}m)`);
-      this.setStyle(this.preyRadarText, 'color', prey.isBoss ? '#fbbf24' : '#38bdf8');
+      this.setStyle(this.preyRadarText, 'color', prey.isBoss ? '#fbbf24' : prey.isPredator ? '#fb923c' : '#38bdf8');
     } else {
       this.setText(this.preyRadarText, 'All nearby prey hunted');
       this.setStyle(this.preyRadarText, 'color', '#94a3b8');

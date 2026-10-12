@@ -3,9 +3,41 @@ import { sounds } from './audio.js';
 import { lerpAngle } from './utils.js';
 import { buildTube, smoothPath, makeFurTextures, fbm3 } from './procgen.js';
 import { env } from './world.js';
+import { buildBharalModel, buildGoatModel, buildMarmotModel, buildPikaModel, buildSnowcockModel, buildWolfModel, buildMastiffModel } from './wildlife.js';
+
+// ---------------------------------------------------------------------------
+// Every animal in the valley. behavior:
+//   herd     grazes in groups, bolts and alarms the herd (ibex, bharal, goats)
+//   zigzag   jinks left and right as it runs (hare)
+//   burrow   dives into its burrow and hides for a while (marmot)
+//   hider    darts under the nearest boulder and hides (pika)
+//   bird     bursts into flight and lands further away; can't be caught in the air
+//   boss     the Titan Crag Yak: charges and rams
+//   predator wolves: hunt other animals, defend kills, attack the leopard in packs
+//   guard    herders' mastiffs: defend the camp and its goats
+// climber: flees uphill toward the crags (bharal). livestock: lives at the herder camp.
+// sprite: [scale, height] of the ?/! marker. drop: how far the body sinks when it falls.
+// ---------------------------------------------------------------------------
+export const PREY_TYPES = {
+  ibex: { name: 'Himalayan Ibex', hp: 80, meat: 90, xp: 85, flee: 12.5, behavior: 'herd', sprite: [1.6, 3.2], stride: 1.5, print: 0.95, radius: 0.75, drop: 0.75 },
+  bharal: { name: 'Bharal (Blue Sheep)', hp: 70, meat: 80, xp: 80, flee: 13, behavior: 'herd', climber: true, sprite: [1.5, 3.0], stride: 1.45, print: 0.9, radius: 0.7, drop: 0.7 },
+  hare: { name: 'Snow Hare', hp: 32, meat: 35, xp: 45, flee: 12.5, behavior: 'zigzag', sprite: [1.0, 1.4], stride: 0.9, print: 0.6, radius: 0.4, drop: 0.25 },
+  marmot: { name: 'Himalayan Marmot', hp: 22, meat: 22, xp: 35, flee: 8.5, behavior: 'burrow', sprite: [0.9, 1.2], stride: 0.6, print: 0.45, radius: 0.4, drop: 0.2, smallShadow: true },
+  pika: { name: 'Pika', hp: 10, meat: 8, xp: 18, flee: 9.5, behavior: 'hider', sprite: [0.7, 0.9], stride: 0.4, print: 0.3, radius: 0.25, drop: 0.1, smallShadow: true },
+  snowcock: { name: 'Himalayan Snowcock', hp: 14, meat: 12, xp: 28, flee: 6, behavior: 'bird', sprite: [0.9, 1.4], stride: 0.5, print: 0.35, radius: 0.3, drop: 0.2, smallShadow: true },
+  goat: { name: "Herders' Goat", hp: 40, meat: 50, xp: 25, flee: 9, behavior: 'herd', livestock: true, sprite: [1.3, 2.4], stride: 1.2, print: 0.75, radius: 0.6, drop: 0.55 },
+  yak: { name: 'Titan Crag Yak', hp: 300, meat: 350, xp: 350, flee: 7.5, behavior: 'boss', sprite: [2.4, 4.6], stride: 2.6, print: 1.6, radius: 1.4, drop: 1.5 },
+  wolf: { name: 'Grey Wolf', hp: 90, meat: 0, xp: 90, flee: 13, chase: 13.5, bite: 6, behavior: 'predator', sprite: [1.3, 2.2], stride: 1.6, print: 0.8, radius: 0.6, drop: 0.45 },
+  dog: { name: 'Herding Mastiff', hp: 110, meat: 0, xp: 70, flee: 11, chase: 12.5, bite: 7, behavior: 'guard', sprite: [1.3, 2.2], stride: 1.5, print: 0.8, radius: 0.6, drop: 0.45 }
+};
+
+// Where the herders camp (tents built in camp.js); goats graze and mastiffs guard here
+export const HERDER_CAMP = { x: -72, z: 118 };
 
 // Carcasses that are never fully eaten rot away after this many seconds
 const CARCASS_LIFETIME = 90;
+// A kill dragged into cover by a rock or tree (cached) keeps much longer
+const CACHED_CARCASS_LIFETIME = 600;
 // Seconds a fully eaten carcass lingers before it is removed
 const EATEN_DISSOLVE_TIME = 6;
 
@@ -19,6 +51,7 @@ const WHISKER_MAT = new THREE.MeshBasicMaterial({ color: 0xf2f2f0, transparent: 
 const _toPlayer = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _fleeDir = new THREE.Vector3();
+const _uphill = new THREE.Vector3();
 
 // Prey Entity (Himalayan Ibex / Snow Hare / Titan Yak Boss) with Wildcraft Stealth & Perception AI
 export class PreyManager {
@@ -36,36 +69,77 @@ export class PreyManager {
     this.preyList.forEach((p) => p.applyDifficulty(diff));
   }
 
-  spawnInitialPrey() {
-    // Spawn 7 Himalayan Ibex
-    for (let i = 0; i < 7; i++) {
-      const angle = (i / 7) * Math.PI * 2 + Math.random() * 0.5;
-      const dist = 35 + Math.random() * 70;
-      const x = Math.cos(angle) * dist;
-      const z = Math.sin(angle) * dist;
-      this.spawnPrey('ibex', x, z);
-    }
-
-    // Spawn 6 Snow Hares
-    for (let i = 0; i < 6; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 25 + Math.random() * 80;
-      const x = Math.cos(angle) * dist;
-      const z = Math.sin(angle) * dist;
-      this.spawnPrey('hare', x, z);
-    }
-
-    // Spawn 2 Legendary Boss Yaks (Titan Crag Yaks) far out on the high crags, away from camp
-    this.spawnPrey('yak', 84, 88);
-    this.spawnPrey('yak', -96, -82);
+  // Random point on a ring around the valley centre
+  ringPoint(minDist, maxDist) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = minDist + Math.random() * (maxDist - minDist);
+    return { x: Math.cos(angle) * dist, z: Math.sin(angle) * dist };
   }
 
-  spawnPrey(type, x, z) {
-    const p = new PreyAnimal(this.scene, this.terrain, type, x, z, this.difficulty);
+  // A group of `count` animals within `spread` metres of a point
+  spawnGroup(type, count, x, z, spread, extra = {}) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * spread;
+      this.spawnPrey(type, x + Math.cos(a) * r, z + Math.sin(a) * r, extra);
+    }
+  }
+
+  spawnInitialPrey() {
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+      const dist = 35 + Math.random() * 70;
+      this.spawnPrey('ibex', Math.cos(angle) * dist, Math.sin(angle) * dist);
+    }
+    for (let i = 0; i < 5; i++) {
+      const p = this.ringPoint(25, 105);
+      this.spawnPrey('hare', p.x, p.z);
+    }
+    // Bharal herds on the slopes
+    for (let h = 0; h < 2; h++) {
+      const p = this.ringPoint(50, 120);
+      this.spawnGroup('bharal', 4, p.x, p.z, 7);
+    }
+    // A marmot colony, pikas among the boulders, snowcocks on the open slopes
+    const colony = this.ringPoint(40, 90);
+    this.spawnGroup('marmot', 3, colony.x, colony.z, 9);
+    for (let i = 0; i < 3; i++) {
+      const p = this.ringPoint(30, 120);
+      this.spawnPrey('pika', p.x, p.z);
+    }
+    const covey = this.ringPoint(40, 110);
+    this.spawnGroup('snowcock', 3, covey.x, covey.z, 5);
+
+    // Two Titan Crag Yaks far out on the high crags, away from camp
+    this.spawnPrey('yak', 84, 88);
+    this.spawnPrey('yak', -96, -82);
+
+    // A wolf pack roams the far side of the valley
+    this.spawnGroup('wolf', 3, 112, -96, 6, { packId: 1 });
+
+    // Herder camp: goats and their mastiffs
+    this.spawnGroup('goat', 4, HERDER_CAMP.x, HERDER_CAMP.z, 9, { home: HERDER_CAMP });
+    this.spawnGroup('dog', 2, HERDER_CAMP.x, HERDER_CAMP.z, 4, { home: HERDER_CAMP });
+  }
+
+  spawnPrey(type, x, z, extra = {}) {
+    const p = new PreyAnimal(this.scene, this.terrain, type, x, z, this.difficulty, extra);
+    p.manager = this;
     this.preyList.push(p);
+    return p;
+  }
+
+  // Where a replacement for an animal of this type appears
+  respawnPoint(dead) {
+    if (dead.home && (dead.type === 'goat' || dead.type === 'dog')) {
+      const a = Math.random() * Math.PI * 2;
+      return { x: dead.home.x + Math.cos(a) * 30, z: dead.home.z + Math.sin(a) * 30 };
+    }
+    return this.ringPoint(80, 130);
   }
 
   update(delta, player) {
+    if (this.alarmTimer > 0) this.alarmTimer -= delta;
     this.preyList.forEach((p) => {
       p.update(delta, player, this.preyList);
     });
@@ -76,13 +150,14 @@ export class PreyManager {
       if (p.isDead) {
         p.deadTimer += delta;
         if (p.meatAmount <= 0) p.dissolveTimer += delta;
-        if (p.dissolveTimer > EATEN_DISSOLVE_TIME || p.deadTimer > CARCASS_LIFETIME) {
+        const lifetime = p.cached ? CACHED_CARCASS_LIFETIME : CARCASS_LIFETIME;
+        if (p.dissolveTimer > EATEN_DISSOLVE_TIME || p.deadTimer > lifetime) {
           p.destroy();
           this.preyList.splice(i, 1);
-          // Respawn in distant location
-          const angle = Math.random() * Math.PI * 2;
-          const dist = 80 + Math.random() * 50;
-          this.spawnPrey(p.type, Math.cos(angle) * dist, Math.sin(angle) * dist);
+          // A replacement wanders in from afar (livestock and dogs from the camp's surroundings)
+          const at = this.respawnPoint(p);
+          const extra = { packId: p.packId, home: p.type === 'goat' || p.type === 'dog' ? p.home : undefined };
+          this.spawnPrey(p.type, at.x, at.z, extra);
         }
       }
     }
@@ -93,7 +168,7 @@ export class PreyManager {
     let nearest = null;
     let minDistSq = Infinity;
     for (const p of this.preyList) {
-      if (p.isDead || (bossOnly && !p.isBoss)) continue;
+      if (p.isDead || p.hidden || (bossOnly && !p.isBoss)) continue;
       const dSq = playerPos.distanceToSquared(p.position);
       if (dSq < minDistSq) {
         minDistSq = dSq;
@@ -105,11 +180,21 @@ export class PreyManager {
 }
 
 export class PreyAnimal {
-  constructor(scene, terrain, type, x, z, difficulty = 'medium') {
+  constructor(scene, terrain, type, x, z, difficulty = 'medium', extra = {}) {
     this.scene = scene;
     this.terrain = terrain;
-    this.type = type; // 'ibex', 'hare', or 'yak'
+    this.type = type; // a key of PREY_TYPES
+    this.cfg = PREY_TYPES[type];
+    this.behavior = this.cfg.behavior;
     this.isBoss = type === 'yak';
+    this.isPredator = this.behavior === 'predator' || this.behavior === 'guard';
+    this.packId = extra.packId || 0;
+    this.home = extra.home || (this.behavior === 'burrow' ? { x, z } : null);
+    this.pinnedTimer = 0; // held down by a pounce, waiting for the throat bite
+    this.hidden = false; // in a burrow / under a rock
+    this.airborne = false; // birds in flight
+    this.threat = null; // position of a wolf chasing it (flees from that instead of the leopard)
+    this.cached = false;
 
     this.position = new THREE.Vector3(x, this.terrain.getTerrainHeight(x, z), z);
     this.facingAngle = Math.random() * Math.PI * 2;
@@ -120,33 +205,26 @@ export class PreyAnimal {
     this.dissolveTimer = 0;
 
     // Base Archetype Configuration
+    const cfg = this.cfg;
+    this.name = cfg.name;
+    this.baseMaxHp = cfg.hp;
+    this.meatAmount = cfg.meat;
+    this.xpReward = cfg.xp;
+    this.maxFleeSpeed = cfg.flee;
+    this.chargeSpeed = 0;
+    this.baseRamDamage = 0;
     if (this.isBoss) {
-      this.name = 'Titan Crag Yak';
-      this.baseMaxHp = 300;
-      this.meatAmount = 350;
-      this.xpReward = 350;
       // A yak is a heavy animal: slower than a sprinting snow leopard both charging and fleeing
-      this.maxFleeSpeed = 7.5;
       this.chargeSpeed = 11.0;
       this.baseRamDamage = 18;
       this.chargeTimer = 0;
       this.chargeCooldown = 0;
-    } else if (type === 'ibex') {
-      this.name = 'Himalayan Ibex';
-      this.baseMaxHp = 80;
-      this.meatAmount = 90;
-      this.xpReward = 85;
-      this.maxFleeSpeed = 12.5;
-      this.chargeSpeed = 0;
-      this.baseRamDamage = 0;
-    } else {
-      this.name = 'Snow Hare';
-      this.baseMaxHp = 32;
-      this.meatAmount = 35;
-      this.xpReward = 45;
-      this.maxFleeSpeed = 12.5;
-      this.chargeSpeed = 0;
-      this.baseRamDamage = 0;
+    }
+    if (this.isPredator) {
+      this.baseRamDamage = cfg.bite;
+      this.biteCooldown = 0;
+      this.huntTimer = 40 + Math.random() * 60; // seconds until the pack gets hungry
+      this.state = 'PATROL';
     }
 
     this.speed = 0;
@@ -162,12 +240,25 @@ export class PreyAnimal {
 
     // Build stylized 3D Model (once per type, then cloned)
     if (!MODEL_CACHE[type]) {
-      if (this.isBoss) MODEL_CACHE[type] = this.buildYakModel();
-      else if (type === 'ibex') MODEL_CACHE[type] = this.buildIbexModel();
-      else MODEL_CACHE[type] = this.buildHareModel();
+      const builders = {
+        yak: () => this.buildYakModel(),
+        ibex: () => this.buildIbexModel(),
+        hare: () => this.buildHareModel(),
+        bharal: () => buildBharalModel(this),
+        goat: () => buildGoatModel(this),
+        marmot: () => buildMarmotModel(this),
+        pika: () => buildPikaModel(this),
+        snowcock: () => buildSnowcockModel(this),
+        wolf: () => buildWolfModel(this),
+        dog: () => buildMastiffModel(this)
+      };
+      MODEL_CACHE[type] = builders[type]();
+      // Tiny animals don't need to cast shadows (saves a lot of draw calls on phones)
+      if (this.cfg.smallShadow) MODEL_CACHE[type].traverse((o) => { if (o.isMesh) o.castShadow = false; });
     }
     this.mesh = MODEL_CACHE[type].clone();
     this.headNode = this.mesh.getObjectByName('head');
+    this.wingNodes = this.mesh.children.filter((c) => c.name === 'wing');
     this.legMeshes = this.mesh.children.filter((c) => c.name === 'leg');
     this.kneeNodes = this.legMeshes.map((leg) => leg.getObjectByName('knee'));
     this.mesh.position.copy(this.position);
@@ -217,16 +308,9 @@ export class PreyAnimal {
 
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
     const sprite = new THREE.Sprite(mat);
-    if (this.isBoss) {
-      sprite.scale.set(2.4, 2.4, 2.4);
-      sprite.position.y = 4.6;
-    } else if (this.type === 'ibex') {
-      sprite.scale.set(1.6, 1.6, 1.6);
-      sprite.position.y = 3.2;
-    } else {
-      sprite.scale.set(1.0, 1.0, 1.0);
-      sprite.position.y = 1.4;
-    }
+    const [scale, height] = this.cfg.sprite;
+    sprite.scale.set(scale, scale, scale);
+    sprite.position.y = height;
     sprite.visible = false;
     return sprite;
   }
@@ -269,7 +353,14 @@ export class PreyAnimal {
       const cfg = {
         ibex: { shag: 1.2, contrast: 0.22, seed: 1, normal: 0.55, rough: 0.9 },
         hare: { shag: 0.7, contrast: 0.12, seed: 2, normal: 0.35, rough: 0.92 },
-        yak: { shag: 2.6, contrast: 0.4, seed: 3, normal: 0.9, rough: 0.95 }
+        yak: { shag: 2.6, contrast: 0.4, seed: 3, normal: 0.9, rough: 0.95 },
+        bharal: { shag: 0.9, contrast: 0.16, seed: 4, normal: 0.45, rough: 0.9 },
+        goat: { shag: 2.0, contrast: 0.3, seed: 9, normal: 0.8, rough: 0.95 },
+        marmot: { shag: 1.1, contrast: 0.2, seed: 5, normal: 0.5, rough: 0.92 },
+        pika: { shag: 0.9, contrast: 0.15, seed: 6, normal: 0.4, rough: 0.92 },
+        snowcock: { shag: 0.5, contrast: 0.25, seed: 7, normal: 0.3, rough: 0.85 },
+        wolf: { shag: 1.6, contrast: 0.28, seed: 13, normal: 0.6, rough: 0.92 },
+        dog: { shag: 2.4, contrast: 0.3, seed: 17, normal: 0.8, rough: 0.95 }
       }[kind];
       const { map, normalMap } = makeFurTextures(256, cfg.shag, cfg.contrast, cfg.seed);
       FUR_MATERIALS[kind] = new THREE.MeshStandardMaterial({
@@ -661,6 +752,14 @@ export class PreyAnimal {
 
     if (this.hp <= 0) {
       this.die();
+    } else if (this.isPredator) {
+      // Wolves and mastiffs fight back, and break off once badly hurt
+      this.alertMeter = 100;
+      if (this.hp < this.maxHp * 0.35) this.retreat();
+      else {
+        this.state = 'ATTACK';
+        this.updateSprite('⚔️', '#dc2626');
+      }
     } else {
       this.alertMeter = 100;
       if (this.isBoss) {
@@ -685,6 +784,20 @@ export class PreyAnimal {
   die() {
     this.isDead = true;
     this.state = 'DOWNED';
+    this.pinnedTimer = 0;
+    this.airborne = false;
+    if (this.cfg.livestock && this.manager) {
+      // Taking livestock sets the herders' dogs on you (the real-life cause of most snow leopard killings)
+      this.manager.alarmTimer = 60;
+      if (this.manager.onLivestockKilled) this.manager.onLivestockKilled(this);
+    }
+    if (!this.isBoss) {
+      this.updateSprite(this.meatAmount > 0 ? '🍖' : '', '#22c55e');
+      this.mesh.rotation.z = Math.PI / 2.2;
+      this.mesh.position.y = this.terrain.getSurfaceHeight(this.position.x, this.position.z) - this.cfg.drop;
+      this.position.y = this.mesh.position.y;
+      return;
+    }
     if (this.isBoss) {
       this.updateSprite('👑🍖', '#f59e0b');
       this.mesh.rotation.z = Math.PI / 2.2;
@@ -705,9 +818,42 @@ export class PreyAnimal {
       return;
     }
 
+    // Tucked away in a burrow or under a rock: invisible and untouchable until it peeks out
+    if (this.hidden) {
+      this.hiddenTimer -= delta;
+      if (this.hiddenTimer <= 0 && this.position.distanceTo(player.position) > 12) this.emerge();
+      return;
+    }
+
     this.animTime += delta * 6;
     const distToPlayer = this.position.distanceTo(player.position);
 
+    // Far-away animals are hidden from the renderer (they're lost in the haze anyway)
+    this.mesh.visible = this.isBoss || distToPlayer < 230;
+
+    let targetSpeed;
+    if (this.pinnedTimer > 0) {
+      // Pinned by a pounce: thrashes in place until bitten or it breaks free
+      this.pinnedTimer -= delta;
+      targetSpeed = 0;
+      this.speed = 0;
+      this.mesh.rotation.z = Math.sin(this.animTime * 4) * 0.25;
+      if (this.pinnedTimer <= 0) {
+        this.mesh.rotation.z = 0;
+        this.state = 'FLEEING';
+        this.alertMeter = 100;
+        this.updateSprite('!', '#ef4444');
+      }
+    } else if (this.isPredator) {
+      targetSpeed = this.thinkPredator(delta, player, allPrey, distToPlayer);
+    } else {
+      targetSpeed = this.thinkPrey(delta, player, allPrey, distToPlayer);
+    }
+    this.move(delta, targetSpeed, player);
+  }
+
+  // ------------------------------------------------------------------ prey senses & choices
+  thinkPrey(delta, player, allPrey, distToPlayer) {
     // Flat direction to player
     const dirToPlayer = _toPlayer.subVectors(player.position, this.position).setY(0).normalize();
 
@@ -718,6 +864,8 @@ export class PreyAnimal {
     const perceptionMult = this.perceptionMultiplier;
     const speedMult = this.speedMultiplier;
     const alertMult = this.alertRateMultiplier;
+    // A leopard holding still against the rocks is nearly invisible ("ghost of the mountains")
+    const camo = player.camo || 0;
 
     // --- SENSE CALCULATIONS ---
     // Hearing: drastically reduced when player is STALKING
@@ -727,19 +875,26 @@ export class PreyAnimal {
     hearingDistance *= env.hearing; // blizzard wind masks footsteps
 
     // Sight: prey sees forward cone (~120 deg) further than back; darkness and snowstorms cut it
-    let sightDistance = 42 * perceptionMult * env.sight;
+    let sightDistance = 42 * perceptionMult * env.sight * (1 - 0.75 * camo);
     const inSightCone = angleToPlayer < (Math.PI * 0.65);
     const canSee = inSightCone && distToPlayer < (player.isStalking ? sightDistance * 0.45 : sightDistance);
     const canHear = distToPlayer < hearingDistance;
+    const touching = distToPlayer < (this.cfg.behavior === 'bird' || this.type === 'pika' ? 4 : 7) * (1 - 0.4 * camo);
 
     // Detect Player
-    if (canSee || canHear || distToPlayer < 7) {
+    if (canSee || canHear || touching) {
       // Stalking fills alert meter 70% slower!
-      const alertRate = (player.isStalking ? 18 : (player.isSprinting ? 95 : 45)) * alertMult;
+      const alertRate = (player.isStalking ? 18 : (player.isSprinting ? 95 : 45)) * alertMult * (1 - 0.5 * camo);
       this.alertMeter = Math.min(100, this.alertMeter + delta * alertRate);
     } else {
       // Calms down over time if out of range
       this.alertMeter = Math.max(0, this.alertMeter - delta * 15);
+    }
+    // A wolf on its heels counts as a threat too
+    if (this.threat) {
+      this.alertMeter = 100;
+      this.threatTimer -= delta;
+      if (this.threatTimer <= 0) this.threat = null;
     }
 
     // State transitions based on alert meter
@@ -758,18 +913,7 @@ export class PreyAnimal {
           }
         }
       } else if (this.state !== 'FLEEING') {
-        this.state = 'FLEEING';
-        this.updateSprite('!', '#ef4444');
-        sounds.playPreyAlert();
-
-        // Alert nearby herd mates!
-        allPrey.forEach((other) => {
-          if (other !== this && !other.isDead && !other.isBoss && this.position.distanceTo(other.position) < 24) {
-            other.alertMeter = 90;
-            other.state = 'FLEEING';
-            other.updateSprite('!', '#ef4444');
-          }
-        });
+        this.startFleeing(allPrey, true);
       }
     } else if (this.alertMeter > 25) {
       if (this.state === 'GRAZING') {
@@ -789,17 +933,31 @@ export class PreyAnimal {
       this.wanderTimer -= delta;
       if (this.wanderTimer <= 0) {
         this.wanderTimer = 3 + Math.random() * 5;
-        this.facingAngle = lerpAngle(this.facingAngle, this.facingAngle + (Math.random() - 0.5) * 1.8, 1);
+        let turn = (Math.random() - 0.5) * 1.8;
+        // Livestock and marmots stay close to home
+        if (this.home && Math.hypot(this.home.x - this.position.x, this.home.z - this.position.z) > (this.cfg.livestock ? 16 : 8)) {
+          turn = lerpAngle(0, Math.atan2(this.home.x - this.position.x, this.home.z - this.position.z) - this.facingAngle, 1);
+        }
+        this.facingAngle = lerpAngle(this.facingAngle, this.facingAngle + turn, 1);
       }
-      targetSpeed = 1.2 * speedMult;
-      // Head down grazing
-      this.headNode.rotation.x = 0.5 + Math.sin(this.animTime * 0.4) * 0.2;
+      // Drowsy at night: barely moves
+      targetSpeed = (env.phase === 'night' ? 0.5 : 1.2) * speedMult * (this.cfg.flee < 10 ? 0.6 : 1);
+      // Head down grazing; marmots sit up on sentry now and then
+      if (this.behavior === 'burrow' && Math.sin(this.animTime * 0.18) > 0.7) {
+        targetSpeed = 0;
+        this.headNode.rotation.x = -0.7;
+        this.mesh.rotation.x = -0.55;
+      } else {
+        this.mesh.rotation.x = 0;
+        this.headNode.rotation.x = 0.5 + Math.sin(this.animTime * 0.4) * 0.2;
+      }
     } else if (this.state === 'SUSPICIOUS') {
       // Freeze, look at predator
       targetSpeed = 0;
       const lookAngle = Math.atan2(dirToPlayer.x, dirToPlayer.z);
       this.facingAngle = lerpAngle(this.facingAngle, lookAngle, delta * 3);
       this.headNode.rotation.x = -0.3; // Head held alert and high
+      this.mesh.rotation.x = 0;
     } else if (this.state === 'CHARGING') {
       // BOSS YAK COMBAT: Charge straight at the predator!
       this.chargeTimer -= delta;
@@ -833,12 +991,12 @@ export class PreyAnimal {
         }
       }
     } else if (this.state === 'FLEEING') {
-      // Bolt in opposite direction of predator, with erratic zigzags for hares
       targetSpeed = this.maxFleeSpeed * speedMult;
+      this.mesh.rotation.x = 0;
+      const from = this.threat && this.threat.distanceTo(this.position) < distToPlayer ? this.threat : player.position;
+      const fleeDir = _fleeDir.subVectors(this.position, from).setY(0).normalize();
 
-      const fleeDir = _fleeDir.subVectors(this.position, player.position).setY(0).normalize();
-
-      if (this.type === 'hare') {
+      if (this.behavior === 'zigzag') {
         this.zigzagTimer -= delta;
         if (this.zigzagTimer <= 0) {
           this.zigzagTimer = 0.4 + Math.random() * 0.4;
@@ -848,6 +1006,22 @@ export class PreyAnimal {
         const px = -fleeDir.z * this.zigzagDir * 0.6;
         const pz = fleeDir.x * this.zigzagDir * 0.6;
         fleeDir.set(fleeDir.x + px, 0, fleeDir.z + pz).normalize();
+      } else if (this.cfg.climber) {
+        // Bharal escape up onto the steep crags
+        const n = this.terrain.getTerrainNormal(this.position.x, this.position.z, _uphill);
+        fleeDir.x -= n.x * 1.4;
+        fleeDir.z -= n.z * 1.4;
+        fleeDir.normalize();
+      } else if (this.refuge) {
+        // Marmots and pikas run for the burrow / nearest boulder and vanish into it
+        const dx = this.refuge.x - this.position.x;
+        const dz = this.refuge.z - this.position.z;
+        const d = Math.hypot(dx, dz);
+        if (d < this.refuge.reach) {
+          this.hide();
+          return 0;
+        }
+        fleeDir.set(dx / d, 0, dz / d);
       }
 
       const targetAngle = Math.atan2(fleeDir.x, fleeDir.z);
@@ -856,12 +1030,250 @@ export class PreyAnimal {
       this.headNode.rotation.x = 0.1;
 
       // If fled far enough, calm down
-      if (distToPlayer > 55) {
+      if (distToPlayer > 55 && !this.threat) {
         this.alertMeter = Math.max(0, this.alertMeter - delta * 20);
       }
     }
+    return targetSpeed;
+  }
 
+  // Panic: bolt, and warn every other animal nearby (alarm calls, marmot whistles)
+  startFleeing(allPrey, spread) {
+    this.state = 'FLEEING';
+    this.updateSprite('!', '#ef4444');
+    if (this.behavior === 'bird') {
+      this.takeOff();
+      return;
+    }
+    if (this.behavior === 'burrow') {
+      sounds.playMarmotWhistle();
+      this.refuge = { x: this.home.x, z: this.home.z, reach: 1.4 };
+    } else if (this.behavior === 'hider') {
+      const { obstacle } = this.terrain.nearestObstacle(this.position, 'rock');
+      this.refuge = obstacle ? { x: obstacle.x, z: obstacle.z, reach: obstacle.radius + 0.8 } : null;
+    } else {
+      sounds.playPreyAlert();
+    }
+    if (!spread) return;
+    const reach = this.behavior === 'burrow' ? 32 : 24;
+    allPrey.forEach((other) => {
+      if (other === this || other.isDead || other.isBoss || other.isPredator || other.hidden || other.state === 'FLEEING') return;
+      if (this.position.distanceTo(other.position) < reach) {
+        other.alertMeter = 90;
+        other.startFleeing(allPrey, false);
+      }
+    });
+  }
+
+  hide() {
+    this.hidden = true;
+    this.hiddenTimer = 12 + Math.random() * 10;
+    this.mesh.visible = false;
+    this.state = 'GRAZING';
+    this.alertMeter = 0;
+    this.speed = 0;
+    this.updateSprite('', '');
+  }
+
+  emerge() {
+    this.hidden = false;
+    this.mesh.visible = true;
+    this.refuge = null;
+    this.state = 'SUSPICIOUS';
+    this.alertMeter = 40;
+    this.updateSprite('?', '#eab308');
+  }
+
+  // Snowcock bursts into flight downhill and lands a good way off
+  takeOff() {
+    this.airborne = true;
+    this.flightTime = 0;
+    this.flightLength = 2.6 + Math.random() * 0.8;
+    sounds.playBirdCall();
+  }
+
+  // ------------------------------------------------------------------ wolves & mastiffs
+  // PATROL with the pack -> HUNT a target -> FEED on the kill. They turn on the leopard when it
+  // comes too close (to their kill, or to the camp for mastiffs) and RETREAT once badly hurt.
+  thinkPredator(delta, player, allPrey, distToPlayer) {
+    const isDog = this.behavior === 'guard';
+    const cfg = this.cfg;
+    const leopardDown = player.isDowned;
+    if (this.biteCooldown > 0) this.biteCooldown -= delta;
+    this.headNode.rotation.x = 0.2;
+
+    if (this.state === 'RETREAT') {
+      this.retreatTimer -= delta;
+      if (this.retreatTimer <= 0) this.state = 'PATROL';
+      const away = _fleeDir.subVectors(this.position, player.position).setY(0).normalize();
+      this.facingAngle = lerpAngle(this.facingAngle, Math.atan2(away.x, away.z), delta * 6);
+      return cfg.flee * this.speedMultiplier;
+    }
+
+    // Decide whether to go for the leopard
+    let provoked = false;
+    if (isDog) {
+      const fromCamp = Math.hypot(player.position.x - this.home.x, player.position.z - this.home.z);
+      const alarm = this.manager && this.manager.alarmTimer > 0;
+      provoked = fromCamp < 30 || (alarm && distToPlayer < 90);
+      if (this.state === 'ATTACK' && !alarm && fromCamp > 48) provoked = false;
+    } else {
+      const pack = allPrey.filter((p) => p.type === 'wolf' && p.packId === this.packId && !p.isDead);
+      const brave = pack.length >= 2 || player.hp < player.maxHp * 0.4;
+      const guardingKill = this.feedOn && !this.feedOn.isDead ? false : this.feedOn && this.feedOn.position.distanceTo(player.position) < 13;
+      const closeCall = distToPlayer < 9 * env.sight * (1 - 0.6 * (player.camo || 0)) * (player.isStalking ? 0.6 : 1);
+      provoked = brave && (guardingKill || closeCall || this.state === 'ATTACK') && distToPlayer < 32;
+      if (!brave && distToPlayer < 14) this.retreat();
+    }
+    if (leopardDown) provoked = false;
+
+    if (provoked) {
+      if (this.state !== 'ATTACK') {
+        this.state = 'ATTACK';
+        this.updateSprite('⚔️', '#dc2626');
+        sounds.playGrowl();
+      }
+      const dir = _toPlayer.subVectors(player.position, this.position).setY(0).normalize();
+      this.facingAngle = lerpAngle(this.facingAngle, Math.atan2(dir.x, dir.z), delta * 7);
+      this.headNode.rotation.x = 0.45;
+      if (distToPlayer < 2.7 && this.biteCooldown <= 0) {
+        this.biteCooldown = 1.9;
+        const dmg = Math.round(this.ramDamage);
+        player.takeDamage(dmg);
+        if (player.onBitten) player.onBitten(dmg, this);
+      }
+      return distToPlayer < 2.2 ? 0 : cfg.chase * this.speedMultiplier;
+    }
+    if (this.state === 'ATTACK') {
+      this.state = 'PATROL';
+      this.updateSprite('', '');
+    }
+
+    // Mastiffs just pace around the camp
+    if (isDog) return this.wander(delta, this.home, 10, 1.4);
+
+    // Feeding on a kill
+    if (this.state === 'FEED') {
+      const kill = this.feedOn;
+      const d = kill ? Math.hypot(kill.position.x - this.position.x, kill.position.z - this.position.z) : Infinity;
+      if (!kill || kill.meatAmount <= 0 || d > 60) {
+        this.state = 'PATROL';
+        this.feedOn = null;
+      } else if (d > 2.6) {
+        // trot over to the pack's kill
+        this.facingAngle = lerpAngle(this.facingAngle, Math.atan2(kill.position.x - this.position.x, kill.position.z - this.position.z), delta * 6);
+        return d > 12 ? this.cfg.chase * 0.7 : 3;
+      } else {
+        kill.meatAmount = Math.max(0, kill.meatAmount - delta * 1.5);
+        this.headNode.rotation.x = 0.8;
+        return 0;
+      }
+    }
+
+    // Hunting
+    if (this.state === 'HUNT') {
+      const t = this.target;
+      this.huntChase -= delta;
+      if (!t || t.isDead || t.hidden || t.airborne || this.huntChase <= 0) {
+        this.state = 'PATROL';
+        this.huntTimer = 60 + Math.random() * 60;
+        if (t && t.isDead) {
+          this.state = 'FEED';
+          this.feedOn = t;
+        }
+        return 0;
+      }
+      t.threat = this.position;
+      t.threatTimer = 1;
+      const dir = _toPlayer.subVectors(t.position, this.position).setY(0);
+      const d = dir.length();
+      dir.normalize();
+      this.facingAngle = lerpAngle(this.facingAngle, Math.atan2(dir.x, dir.z), delta * 6);
+      if (d < 2.3) {
+        t.takeDamage(t.hp + 1); // pulled down
+        t.threat = null;
+        this.state = 'FEED';
+        this.feedOn = t;
+        for (const w of allPrey) if (w.type === 'wolf' && w.packId === this.packId && !w.isDead && w !== this && w.state !== 'ATTACK') { w.state = 'FEED'; w.feedOn = t; }
+        return 0;
+      }
+      return cfg.chase * this.speedMultiplier;
+    }
+
+    // Patrolling: the leader wanders, the rest trot along behind
+    this.huntTimer -= delta;
+    const leader = allPrey.find((p) => p.type === 'wolf' && p.packId === this.packId && !p.isDead);
+    if (this.huntTimer <= 0 && leader === this) {
+      let best = null;
+      let bestD = 70;
+      for (const p of allPrey) {
+        if (p.isDead || p.hidden || p.airborne || p.isBoss || p.isPredator || p.cfg.livestock) continue;
+        const d = p.position.distanceTo(this.position);
+        if (d < bestD) {
+          bestD = d;
+          best = p;
+        }
+      }
+      if (best) {
+        for (const w of allPrey) {
+          if (w.type === 'wolf' && w.packId === this.packId && !w.isDead && w.state === 'PATROL') {
+            w.state = 'HUNT';
+            w.target = best;
+            w.huntChase = 18;
+          }
+        }
+        if (env.phase === 'night' || Math.random() < 0.4) sounds.playWolfHowl(distToPlayer);
+        return cfg.chase;
+      }
+      this.huntTimer = 20;
+    }
+    if (leader && leader !== this && leader.position.distanceTo(this.position) > 7) {
+      const dir = _toPlayer.subVectors(leader.position, this.position).setY(0).normalize();
+      this.facingAngle = lerpAngle(this.facingAngle, Math.atan2(dir.x, dir.z), delta * 4);
+      return leader.position.distanceTo(this.position) > 20 ? cfg.chase * 0.8 : 3.2;
+    }
+    return this.wander(delta, null, 0, 2.2);
+  }
+
+  retreat() {
+    this.state = 'RETREAT';
+    this.retreatTimer = 12;
+    this.updateSprite('!', '#ef4444');
+  }
+
+  // Ambles around, turning back toward `home` if it strays more than `range` metres
+  wander(delta, home, range, speed) {
+    this.wanderTimer -= delta;
+    if (this.wanderTimer <= 0) {
+      this.wanderTimer = 2 + Math.random() * 4;
+      if (home && Math.hypot(home.x - this.position.x, home.z - this.position.z) > range) {
+        this.facingAngle = Math.atan2(home.x - this.position.x, home.z - this.position.z);
+      } else {
+        this.facingAngle = lerpAngle(this.facingAngle, this.facingAngle + (Math.random() - 0.5) * 1.6, 1);
+      }
+    }
+    return speed * (env.phase === 'night' ? 0.7 : 1);
+  }
+
+  // ------------------------------------------------------------------ movement & animation
+  move(delta, targetSpeed, player) {
     this.speed = THREE.MathUtils.lerp(this.speed, targetSpeed, delta * 6);
+
+    // Birds in flight: fast, high arc, wings beating; land and settle afterwards
+    let lift = 0;
+    if (this.airborne) {
+      this.flightTime += delta;
+      const f = this.flightTime / this.flightLength;
+      this.speed = 15;
+      lift = Math.sin(Math.min(1, f) * Math.PI) * 9;
+      for (const w of this.wingNodes) w.rotation.z = Math.sin(this.flightTime * 28) * 0.9 * w.userData.side;
+      if (f >= 1) {
+        this.airborne = false;
+        this.state = 'SUSPICIOUS';
+        this.alertMeter = 45;
+        for (const w of this.wingNodes) w.rotation.z = 0;
+      }
+    }
 
     // Apply movement
     if (this.speed > 0.1) {
@@ -869,16 +1281,11 @@ export class PreyAnimal {
       this.position.z += Math.cos(this.facingAngle) * this.speed * delta;
 
       // Dynamic hoof/paw prints on snow when running or charging
-      if (this.speed > 2.8) {
+      if (this.speed > 2.8 && !this.airborne) {
         this.stepTimer = (this.stepTimer || 0) + delta;
         if (this.stepTimer > 0.18) {
           this.stepTimer = 0;
-          this.terrain.addPawPrint(
-            this.position.x,
-            this.position.z,
-            this.facingAngle,
-            this.isBoss ? 1.6 : (this.type === 'ibex' ? 0.95 : 0.6)
-          );
+          this.terrain.addPawPrint(this.position.x, this.position.z, this.facingAngle, this.cfg.print);
         }
       }
     }
@@ -888,8 +1295,8 @@ export class PreyAnimal {
     this.position.x = THREE.MathUtils.clamp(this.position.x, -maxBound, maxBound);
     this.position.z = THREE.MathUtils.clamp(this.position.z, -maxBound, maxBound);
 
-    // Solid collision against rocks and tree trunks
-    this.terrain.resolveCollision(this.position, this.isBoss ? 1.4 : (this.type === 'ibex' ? 0.75 : 0.4));
+    // Solid collision against rocks and tree trunks (birds fly over them)
+    if (!this.airborne) this.terrain.resolveCollision(this.position, this.cfg.radius);
 
     // A yak is a wall of muscle: keep the leopard (and the camera) out of its body
     if (this.isBoss) {
@@ -903,16 +1310,16 @@ export class PreyAnimal {
       }
     }
 
-    // Terrain ground clamp
-    const groundY = this.terrain.getTerrainHeight(this.position.x, this.position.z);
-    this.position.y = groundY;
+    // Stand on the snow as drawn
+    const groundY = this.terrain.getSurfaceHeight(this.position.x, this.position.z);
+    this.position.y = groundY + lift;
     this.mesh.position.copy(this.position);
     this.mesh.rotation.y = this.facingAngle;
 
     // Leg animation: stride rate follows actual ground speed and leg length, so a lumbering yak
     // takes slow heavy steps while a hare's legs blur
-    if (this.speed > 0.2) {
-      const strideLen = this.isBoss ? 2.6 : (this.type === 'ibex' ? 1.5 : 0.9);
+    if (this.speed > 0.2 && !this.airborne && this.mesh.visible) {
+      const strideLen = this.cfg.stride;
       this.legPhase = (this.legPhase || 0) + delta * (this.speed / strideLen) * Math.PI * 2;
       const legAmp = Math.min(0.75, 0.25 + this.speed * 0.045);
       this.legMeshes.forEach((leg, idx) => {
@@ -926,7 +1333,7 @@ export class PreyAnimal {
       });
       // body bob + head nod in time with the stride
       this.mesh.position.y = groundY + Math.abs(Math.sin(this.legPhase)) * Math.min(0.12, this.speed * 0.012);
-    } else {
+    } else if (!this.airborne) {
       this.legMeshes.forEach((leg, idx) => {
         leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, 0, delta * 6);
         const knee = this.kneeNodes[idx];
