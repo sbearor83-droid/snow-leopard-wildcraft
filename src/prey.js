@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sounds } from './audio.js';
 import { lerpAngle } from './utils.js';
 import { buildTube, smoothPath, makeFurTextures, fbm3 } from './procgen.js';
@@ -43,9 +44,69 @@ const EATEN_DISSOLVE_TIME = 6;
 
 // One model per prey type is built once and cloned; clones share geometry and materials
 const MODEL_CACHE = {};
+const MODEL_CACHE_LOW = {}; // fully merged copies without moving legs, shown beyond LOD_DISTANCE
+const LOD_DISTANCE = 50;
 const FUR_MATERIALS = {};
-const GLINT_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const GLINT_COLOR = new THREE.Color(2.2, 2.2, 2.2); // over-bright so the highlight still pops on a lit eye
 const WHISKER_MAT = new THREE.MeshBasicMaterial({ color: 0xf2f2f0, transparent: true, opacity: 0.75, depthWrite: false });
+
+// ------------------------------------------------------------------ draw-call trimming
+// Every mesh is a separate draw call (two with shadows), and an animal is built from 15-30 of
+// them. Parts that move together and share a material are merged into one mesh, per node
+// (body, head, each leg segment, each wing). Tiny animals also lose their separate legs.
+function prepForMerge(geo) {
+  const g = geo.index ? geo : geo.toNonIndexed();
+  const n = g.attributes.position.count;
+  if (!g.attributes.color) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+  if (!g.attributes.normal) g.computeVertexNormals();
+  for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(name)) g.deleteAttribute(name);
+  if (!g.index) {
+    const idx = new Uint32Array(n);
+    for (let i = 0; i < n; i++) idx[i] = i;
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+  }
+  return g;
+}
+
+function mergeChildren(node) {
+  const groups = new Map();
+  for (const child of node.children) {
+    if (!child.isMesh || child.isSkinnedMesh) continue;
+    const key = `${child.material.uuid}|${child.castShadow}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(child);
+  }
+  for (const meshes of groups.values()) {
+    if (meshes.length < 2) continue;
+    const geos = meshes.map((m) => {
+      m.updateMatrix();
+      return prepForMerge(m.geometry.clone().applyMatrix4(m.matrix));
+    });
+    const merged = mergeGeometries(geos, false);
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, meshes[0].material);
+    mesh.castShadow = meshes[0].castShadow;
+    mesh.receiveShadow = meshes[0].receiveShadow;
+    for (const m of meshes) node.remove(m);
+    node.add(mesh);
+  }
+  for (const child of node.children) if (!child.isMesh) mergeChildren(child);
+}
+
+function optimizeModel(group, flattenLegs) {
+  if (flattenLegs) {
+    group.updateMatrixWorld(true);
+    for (const leg of group.children.filter((c) => c.name === 'leg')) {
+      const meshes = [];
+      leg.traverse((o) => { if (o.isMesh) meshes.push(o); });
+      for (const m of meshes) group.attach(m);
+      group.remove(leg);
+    }
+  }
+  mergeChildren(group);
+  return group;
+}
 
 // Scratch vectors reused every frame to avoid per-frame allocations
 const _toPlayer = new THREE.Vector3();
@@ -252,14 +313,21 @@ export class PreyAnimal {
         wolf: () => buildWolfModel(this),
         dog: () => buildMastiffModel(this)
       };
-      MODEL_CACHE[type] = builders[type]();
+      const raw = builders[type]();
       // Tiny animals don't need to cast shadows (saves a lot of draw calls on phones)
-      if (this.cfg.smallShadow) MODEL_CACHE[type].traverse((o) => { if (o.isMesh) o.castShadow = false; });
+      if (this.cfg.smallShadow) raw.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+      MODEL_CACHE_LOW[type] = optimizeModel(raw.clone(), true);
+      MODEL_CACHE[type] = optimizeModel(raw, this.cfg.smallShadow && type !== 'snowcock');
     }
-    this.mesh = MODEL_CACHE[type].clone();
-    this.headNode = this.mesh.getObjectByName('head');
-    this.wingNodes = this.mesh.children.filter((c) => c.name === 'wing');
-    this.legMeshes = this.mesh.children.filter((c) => c.name === 'leg');
+    // `mesh` positions the animal; inside it the detailed body (near) or the merged one (far)
+    this.mesh = new THREE.Group();
+    this.body = MODEL_CACHE[type].clone();
+    this.bodyLow = MODEL_CACHE_LOW[type].clone();
+    this.bodyLow.visible = false;
+    this.mesh.add(this.body, this.bodyLow);
+    this.headNode = this.body.getObjectByName('head') || new THREE.Group();
+    this.wingNodes = this.body.children.filter((c) => c.name === 'wing');
+    this.legMeshes = this.body.children.filter((c) => c.name === 'leg');
     this.kneeNodes = this.legMeshes.map((leg) => leg.getObjectByName('knee'));
     this.mesh.position.copy(this.position);
     this.scene.add(this.mesh);
@@ -410,7 +478,11 @@ export class PreyAnimal {
     knee.add(lowerMesh);
 
     if (cfg.hoofH > 0) {
-      const hoof = new THREE.Mesh(new THREE.CylinderGeometry(cfg.hoofR * 0.95, cfg.hoofR * 1.1, cfg.hoofH, 10), hoofMat);
+      // hoof colour is baked into vertex colours so it merges with the leg into one draw call
+      const hoofGeo = new THREE.CylinderGeometry(cfg.hoofR * 0.95, cfg.hoofR * 1.1, cfg.hoofH, 10);
+      const hc = hoofMat.color;
+      hoofGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(hoofGeo.attributes.position.count * 3).map((_, i) => [hc.r, hc.g, hc.b][i % 3]), 3));
+      const hoof = new THREE.Mesh(hoofGeo, mat);
       hoof.position.set(0, -lowerLen - cfg.hoofH * 0.5, -cfg.kneeZ + cfg.hoofR * 0.15);
       hoof.castShadow = true;
       knee.add(hoof);
@@ -420,10 +492,21 @@ export class PreyAnimal {
 
   // Glossy dark eye with a specular highlight so faces read from a distance
   addEye(parent, x, y, z, r, mat) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), mat);
+    // Eye and highlight share one vertex-coloured material so they merge into a single draw call
+    if (!mat.userData.eyeColor) {
+      mat.userData.eyeColor = mat.color.clone();
+      mat.color.set(0xffffff);
+      mat.vertexColors = true;
+    }
+    const tint = (geo, col) => geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).map((_, i) => [col.r, col.g, col.b][i % 3]), 3));
+    const eyeGeo = new THREE.SphereGeometry(r, 12, 10);
+    tint(eyeGeo, mat.userData.eyeColor);
+    const eye = new THREE.Mesh(eyeGeo, mat);
     eye.position.set(x, y, z);
     parent.add(eye);
-    const glint = new THREE.Mesh(new THREE.SphereGeometry(r * 0.28, 6, 6), GLINT_MAT);
+    const glintGeo = new THREE.SphereGeometry(r * 0.28, 6, 6);
+    tint(glintGeo, GLINT_COLOR);
+    const glint = new THREE.Mesh(glintGeo, mat);
     // highlight sits on the upper-outer-front of the eyeball
     glint.position.set(x + Math.sign(x) * r * 0.35, y + r * 0.45, z + r * 0.7);
     parent.add(glint);
@@ -828,8 +911,11 @@ export class PreyAnimal {
     this.animTime += delta * 6;
     const distToPlayer = this.position.distanceTo(player.position);
 
-    // Far-away animals are hidden from the renderer (they're lost in the haze anyway)
-    this.mesh.visible = this.isBoss || distToPlayer < 230;
+    // Far-away animals are hidden from the renderer: small ones are a few pixels well before that
+    this.mesh.visible = this.isBoss || distToPlayer < (this.cfg.smallShadow ? 75 : this.type === 'hare' ? 110 : 170);
+    const near = distToPlayer < LOD_DISTANCE || this.airborne;
+    this.body.visible = near;
+    this.bodyLow.visible = !near;
 
     let targetSpeed;
     if (this.pinnedTimer > 0) {
@@ -1318,7 +1404,7 @@ export class PreyAnimal {
 
     // Leg animation: stride rate follows actual ground speed and leg length, so a lumbering yak
     // takes slow heavy steps while a hare's legs blur
-    if (this.speed > 0.2 && !this.airborne && this.mesh.visible) {
+    if (this.speed > 0.2 && !this.airborne && this.mesh.visible && this.body.visible) {
       const strideLen = this.cfg.stride;
       this.legPhase = (this.legPhase || 0) + delta * (this.speed / strideLen) * Math.PI * 2;
       const legAmp = Math.min(0.75, 0.25 + this.speed * 0.045);
