@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "148053120593-1dggm4vblmt5630malqo05jg68obqua3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.snowleopardworld.game",
+            "certificate_hash": "78a6643f63497a047926f9cbb1031ff90752a26d"
+          }
+        },
+        {
+          "client_id": "148053120593-fh9hq6f3apodhi9b56brsjd2io708mel.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.snowleopardworld.game",
+            "certificate_hash": "c7577495acb28f48863da796f36ad5dbe967622f"
+          }
+        },
+        {
           "client_id": "148053120593-8hc6e3fthsvqfciuhe5re0q4j8bl46t8.apps.googleusercontent.com",
           "client_type": 3
         }
