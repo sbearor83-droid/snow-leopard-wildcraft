@@ -69,7 +69,7 @@ From level 3, at dusk or night, 📣 Call (a yowl) brings a mate. Stay close unt
 
 ### 3. 👃 Scent Vision
 - Triggers a sensory sonar pulse across the snow.
-- Draws scent trails toward nearby living prey (amber: ibex, slate blue: bharal, cyan: hare, gold: marmot, pink: pika, lime: snowcock, orange: wolves and dogs, red: boss).
+- Draws scent ribbons to the 12 nearest animals; the closer the animal, the wider and brighter its ribbon. Colours: orange ibex, blue bharal, cyan hare, yellow marmot, pink pika, green snowcock, brown goat, red for danger (wolves, mastiffs, Titan Yak).
 - Marked boulders glow violet, and buried treasure shoots up a beam.
 - The compass radar shows the nearest prey and its distance.
 

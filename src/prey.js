@@ -46,6 +46,8 @@ const EATEN_DISSOLVE_TIME = 6;
 const MODEL_CACHE = {};
 const MODEL_CACHE_LOW = {}; // fully merged copies without moving legs, shown beyond LOD_DISTANCE
 const LOD_DISTANCE = 50;
+// The Titan Yak gives up the chase once the leopard is this far away at the end of a charge
+const YAK_GIVE_UP_DISTANCE = 22;
 const FUR_MATERIALS = {};
 const GLINT_COLOR = new THREE.Color(2.2, 2.2, 2.2); // over-bright so the highlight still pops on a lit eye
 const WHISKER_MAT = new THREE.MeshBasicMaterial({ color: 0xf2f2f0, transparent: true, opacity: 0.75, depthWrite: false });
@@ -276,7 +278,7 @@ export class PreyAnimal {
     this.baseRamDamage = 0;
     if (this.isBoss) {
       // A yak is a heavy animal: slower than a sprinting snow leopard both charging and fleeing
-      this.chargeSpeed = 11.0;
+      this.chargeSpeed = 9.0; // a sprinting leopard (14.5 m/s) clearly outruns it
       this.baseRamDamage = 18;
       this.chargeTimer = 0;
       this.chargeCooldown = 0;
@@ -967,8 +969,12 @@ export class PreyAnimal {
     const canHear = distToPlayer < hearingDistance;
     const touching = distToPlayer < (this.cfg.behavior === 'bird' || this.type === 'pika' ? 4 : 7) * (1 - 0.4 * camo);
 
+    // A yak that just gave up the chase ignores you for a while unless you come right up close
+    if (this.calmTimer > 0) this.calmTimer -= delta;
+    const ignoring = this.calmTimer > 0 && distToPlayer > 12;
+
     // Detect Player
-    if (canSee || canHear || touching) {
+    if ((canSee || canHear || touching) && !ignoring) {
       // Stalking fills alert meter 70% slower!
       const alertRate = (player.isStalking ? 18 : (player.isSprinting ? 95 : 45)) * alertMult * (1 - 0.5 * camo);
       this.alertMeter = Math.min(100, this.alertMeter + delta * alertRate);
@@ -986,7 +992,7 @@ export class PreyAnimal {
     // State transitions based on alert meter
     if (this.alertMeter >= 85) {
       if (this.isBoss) {
-        if (this.state !== 'CHARGING' && this.state !== 'FLEEING') {
+        if (this.state !== 'CHARGING' && this.state !== 'FLEEING' && this.state !== 'WINDED') {
           if (this.hp > this.maxHp * 0.25) {
             this.state = 'CHARGING';
             this.chargeTimer = 5.0;
@@ -1067,12 +1073,33 @@ export class PreyAnimal {
       }
 
       if (this.chargeTimer <= 0) {
-        if (distToPlayer > 40) {
+        if (distToPlayer > YAK_GIVE_UP_DISTANCE) {
+          // You got away: it loses interest
           this.state = 'GRAZING';
+          this.alertMeter = 30;
+          this.calmTimer = 8;
           this.updateSprite('👑', '#fbbf24');
         } else {
-          // Restart charge cycle
+          // Heavy animal: it has to stop and blow before charging again
+          this.state = 'WINDED';
+          this.windedTimer = 2.5;
+          this.updateSprite('💨', '#64748b');
+        }
+      }
+    } else if (this.state === 'WINDED') {
+      targetSpeed = 0;
+      this.headNode.rotation.x = 0.7 + Math.sin(this.animTime * 2) * 0.1; // head low, panting
+      this.windedTimer -= delta;
+      if (this.windedTimer <= 0) {
+        if (distToPlayer > YAK_GIVE_UP_DISTANCE) {
+          this.state = 'GRAZING';
+          this.alertMeter = 30;
+          this.calmTimer = 8;
+          this.updateSprite('👑', '#fbbf24');
+        } else {
+          this.state = 'CHARGING';
           this.chargeTimer = 4.5;
+          this.updateSprite('⚔️', '#dc2626');
           sounds.playBossGrunt();
         }
       }

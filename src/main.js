@@ -1735,7 +1735,7 @@ class Game {
     this.scavengers.update(delta, this.preyManager.preyList, this.player.position);
 
     // 7. Update Scent Vision Trails & Pulse
-    this.scentVision.update(delta, this.player.position, this.preyManager.preyList);
+    this.scentVision.update(delta, this.player.position, this.preyManager.preyList, this.camera.position);
 
     // 8. Update Camera Follow & Collision
     this.gameCam.update(delta, this.player.position, this.player.isSprinting, this.player.isPouncing, this.player.isStalking);

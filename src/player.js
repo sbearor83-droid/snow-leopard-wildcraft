@@ -34,6 +34,7 @@ const RUN_ENTER_SPEED = 8.0; // m/s: Walk/ProwlWalk -> Run
 const RUN_EXIT_SPEED = 6.5; // m/s: Run -> Walk/ProwlWalk (gap avoids flicker)
 const SPRINT_RUN_SPEED = 4.5; // m/s: with sprint on, Run from here so speeding up never plays a fast walk
 const MAX_GAIT_RATE = 2.4; // cap on clip playback speed while the leopard speeds up or slows down
+const SPRINT_STAMINA_PER_SECOND = 16; // ~6 s of sprint from 100 stamina (more as you level up)
 const AMBUSH_MIN_DROP = 2.2; // metres the landing spot must lie below the leopard for an ambush
 
 // Snow Leopard player: skinned 3D model, skeletal animation state machine & wildcraft survival stats
@@ -707,7 +708,7 @@ export class SnowLeopard {
     if (this.dragging) isSprintInput = false; // hauling a kill in your jaws
     if (isSprintInput && isMoving && this.stamina > 5 && !this.isStalking && !this.isDowned) {
       this.isSprinting = true;
-      this.stamina = Math.max(0, this.stamina - delta * 22);
+      this.stamina = Math.max(0, this.stamina - delta * SPRINT_STAMINA_PER_SECOND);
       if (this.stamina <= 0) this.isSprinting = false;
     } else {
       this.isSprinting = false;
