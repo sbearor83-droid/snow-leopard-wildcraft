@@ -29,5 +29,22 @@ service cloud.firestore {
       // Players can delete their own cloud save (Google Play requires account deletion)
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
+
+    // Error reports from the game (src/errors.js). Anyone may add one, nobody can read,
+    // change or delete them from the app; read them in the Firebase console.
+    match /errorReports/{reportId} {
+      allow create: if request.resource.data.keys().hasOnly(['kind', 'message', 'stack', 'where', 'version', 'platform', 'userAgent', 'gpu', 'safeRender', 'at'])
+        && request.resource.data.kind is string && request.resource.data.kind.size() <= 40
+        && request.resource.data.message is string && request.resource.data.message.size() <= 500
+        && request.resource.data.stack is string && request.resource.data.stack.size() <= 3000
+        && request.resource.data.where is string && request.resource.data.where.size() <= 300
+        && request.resource.data.version is string && request.resource.data.version.size() <= 40
+        && request.resource.data.platform is string && request.resource.data.platform.size() <= 20
+        && request.resource.data.userAgent is string && request.resource.data.userAgent.size() <= 300
+        && request.resource.data.gpu is string && request.resource.data.gpu.size() <= 200
+        && request.resource.data.safeRender is bool
+        && request.resource.data.at == request.time;
+      allow read, update, delete: if false;
+    }
   }
 }

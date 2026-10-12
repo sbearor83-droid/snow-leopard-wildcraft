@@ -17,6 +17,7 @@ import {
 } from './economy.js';
 import { BILLING_ENABLED, PRODUCTS, purchase } from './store.js';
 import { cloud } from './cloud.js';
+import { reportError, setErrorContext } from './errors.js';
 
 const COMPASS_HEADINGS = ['NORTH', 'NE', 'EAST', 'SE', 'SOUTH', 'SW', 'WEST', 'NW'];
 
@@ -54,6 +55,7 @@ class Game {
     const gpuName = gpuRendererName(this.renderer.getContext());
     this.safeRender = isSafeRenderMode() || gpuHasShadowMapBug(gpuName);
     if (this.safeRender) console.warn(`Safe render mode (no shadow maps) for GPU: ${gpuName}`);
+    setErrorContext({ gpu: gpuName, safeRender: this.safeRender });
     this.renderer.shadowMap.enabled = !this.safeRender;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -65,6 +67,7 @@ class Game {
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
       console.warn('WebGL context lost - preventing driver hang.');
+      reportError('webgl-context-lost', `Context lost ${Math.round(performance.now() - this.startedAt)} ms after start`);
       if (this.safeRender) return; // already running the lightest path; wait for a restore
       // Drop shadow maps for the restored context and for every launch from now on. If this
       // happened right after start-up (nothing to lose yet) relaunch straight into safe mode.

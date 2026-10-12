@@ -51,12 +51,13 @@ const UPLOAD_DELAY_MS = 60 * 1000; // batch local changes into one upload a minu
 class ConflictError extends Error {}
 
 async function createFirebaseProvider(config) {
-  const [{ initializeApp }, authLib, fs] = await Promise.all([
+  const [{ initializeApp, getApps, getApp }, authLib, fs] = await Promise.all([
     import('firebase/app'),
     import('firebase/auth'),
     import('firebase/firestore/lite')
   ]);
-  const app = initializeApp(config);
+  // Error reporting (errors.js) may already have started the app
+  const app = getApps().length ? getApp() : initializeApp(config);
   const native = Capacitor.isNativePlatform();
   const auth = authLib.initializeAuth(app, {
     persistence: [authLib.indexedDBLocalPersistence, authLib.browserLocalPersistence],
