@@ -25,8 +25,23 @@ import { planSync, walletOf } from './cloudmerge.js';
 //      (Google sign-in can't use a web popup inside the app, so it goes through
 //      that native plugin.)
 // ---------------------------------------------------------------------------
-export const FIREBASE_CONFIG = null;
-// e.g. { apiKey: '...', authDomain: '...', projectId: '...', appId: '...' }
+// Web app config from Firebase console > Project settings > Your apps. These values only
+// identify the project (they are meant to ship in the app); firestore.rules controls access.
+export const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDmpiFvolcwHMn6y8GSamEoI6llpunSKT0',
+  authDomain: 'snow-leopard-world.firebaseapp.com',
+  projectId: 'snow-leopard-world',
+  storageBucket: 'snow-leopard-world.firebasestorage.app',
+  messagingSenderId: '148053120593',
+  appId: '1:148053120593:web:901dcfd59ed8e7fe344a70'
+};
+
+// In the Android app, Google sign-in goes through the native plugin (step 5 above). Until it is
+// installed and synced, keep cloud saves hidden there instead of showing a button that can't work.
+function firebaseUsable() {
+  if (!FIREBASE_CONFIG) return false;
+  return !Capacitor.isNativePlatform() || Capacitor.isPluginAvailable('FirebaseAuthentication');
+}
 
 const UPLOAD_DELAY_MS = 60 * 1000; // batch local changes into one upload a minute
 
@@ -156,7 +171,7 @@ function mockRequested() {
 // --------------------------------------------------------------- sync manager
 class CloudSave {
   constructor() {
-    this.available = Boolean(FIREBASE_CONFIG) || mockRequested();
+    this.available = firebaseUsable() || mockRequested();
     this.status = this.available ? 'starting' : 'off'; // off | starting | signed-out | signing-in | syncing | synced | error
     this.user = null;
     this.error = '';
